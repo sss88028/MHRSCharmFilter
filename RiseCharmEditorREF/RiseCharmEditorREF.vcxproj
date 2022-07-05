@@ -144,7 +144,8 @@
       <GenerateDebugInformation>true</GenerateDebugInformation>
     </Link>
     <PostBuildEvent>
-      <Command>copy $(targetdir)$(targetname).dll "E:\SteamLibrary\steamapps\common\MonsterHunterRise\reframework\plugins\"</Command>
+      <Command>
+      </Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>

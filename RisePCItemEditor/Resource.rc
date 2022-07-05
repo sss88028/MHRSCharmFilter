@@ -12,8 +12,6 @@
 /////////////////////////////////////////////////////////////////////////////
 #undef APSTUDIO_READONLY_SYMBOLS
 
-MAINICON ICON "D:\\Downloads\\MHRise-Magnamalo_Icon.ico"
-
 /////////////////////////////////////////////////////////////////////////////
 // English (United States) resources
 
@@ -25,8 +23,6 @@ LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
 //
 // PNG
 //
-
-IDB_PNG1                PNG                     "C:\\Users\\Fexty\\Pictures\\TDS_Fexty_256x256.png"
 
 #endif    // English (United States) resources
 /////////////////////////////////////////////////////////////////////////////

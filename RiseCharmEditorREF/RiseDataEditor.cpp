@@ -89,7 +89,12 @@ void RiseDataEditor::render_ui() {
 
                 ImGui::PopStyleVar();
             }
+            if (ImGui::CollapsingHeader(m_header_charm_filtter.c_str())) 
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {7.0f, 0.2f});
 
+                ImGui::PopStyleVar();
+            }
             ImGui::End();
         }
     }
@@ -210,6 +215,7 @@ bool RiseDataEditor::initialize() {
 
     change_language(Language::ENG);
     OutputDebugStringA("[FEXTY] Charm Editor Initialized");
+    ReadDecoSetting();
 
     m_initialized = true;
     return m_initialized;
@@ -377,6 +383,8 @@ void RiseDataEditor::render_ui_charm_editor() {
         c.skill_levels[1] = utility::call<uint32_t>(levellist, "get_Item", 1);
 
         c.rarity = *entry->get_field<Rarity>("_IdVal");
+
+        c.IsLocked = *entry->get_field<bool>("_IsLock");
 
         return c;
     };
@@ -792,6 +800,79 @@ void RiseDataEditor::render_ui_loadout_editor() const {
     }
 }
 
+void RiseDataEditor::RenderUICharmFilter() 
+{
+    auto GetCharm = [](const API::ManagedObject* entry) -> Charm {
+        Charm c{};
+
+        const auto slotlist = *entry->get_field<API::ManagedObject*>("_TalismanDecoSlotNumList");
+        uint32_t counts[3]{};
+
+        counts[0] = utility::call<uint32_t>(slotlist, "get_Item", 1);
+        counts[1] = utility::call<uint32_t>(slotlist, "get_Item", 2);
+        counts[2] = utility::call<uint32_t>(slotlist, "get_Item", 3);
+
+        slot_count_to_slots(counts, c.slots);
+
+        const auto skilllist = *entry->get_field<API::ManagedObject*>("_TalismanSkillIdList");
+
+        c.skills[0] = utility::call<uint32_t>(skilllist, "get_Item", 0);
+        c.skills[1] = utility::call<uint32_t>(skilllist, "get_Item", 1);
+
+        const auto levellist = *entry->get_field<API::ManagedObject*>("_TalismanSkillLvList");
+
+        c.skill_levels[0] = utility::call<uint32_t>(levellist, "get_Item", 0);
+        c.skill_levels[1] = utility::call<uint32_t>(levellist, "get_Item", 1);
+
+        c.rarity = *entry->get_field<Rarity>("_IdVal");
+
+        c.IsLocked = *entry->get_field<bool>("_IsLock");
+
+        return c;
+    };
+
+    auto get_skillname = [this](uint32_t skill) 
+    {
+        const auto str = utility::call<SystemString*>(m_get_skill_name, skill);
+        return utility::narrow(str->data);
+    };
+
+    const auto count = utility::call<uint32_t>(m_inv_list, "get_Count");
+    std::vector<Charm> charms;
+
+    for (auto i = 0u; i < count; i++) 
+    {
+        const auto entry = utility::call<API::ManagedObject*>(m_inv_list, "get_Item", i);
+        const auto type = entry->get_field<EquipmentType>("_IdType");
+
+        if (*type == EquipmentType::Talisman) 
+        {
+            auto& c = charms.emplace_back(GetCharm(entry));
+            c.box_slot = i;
+            c.type = *type;
+        }
+    }
+
+    auto isRemainLock = false;
+    ImGui::Checkbox(_labelRemainLock.c_str(), &isRemainLock);
+
+    if (ImGui::Button("Export deco")) 
+    {
+        const auto path = get_save_as_location();
+
+        auto j = nlohmann::json::array();
+        for (auto i = 0u; i < m_max_skill_id; ++i) 
+        {
+            j.push_back({
+                {"SkillID", static_cast<uint32_t>(i)},
+                {"SkillName", get_skillname(i)}
+                });
+        }
+
+        std::ofstream(path) << j.dump();
+    }
+}
+
 std::string RiseDataEditor::get_save_as_location() const {
     OPENFILENAMEA ofn{};
     char path[0xFFF]{};
@@ -848,11 +929,13 @@ void RiseDataEditor::change_language(Language language) {
     const auto& player_editor = file["Player Editor"];
     const auto& itembox_editor = file["Itembox Editor"];
     const auto& loadout_editor = file["Loadout Editor"];
+    const auto& charmFilter = file["Charm Filter"];
 
     m_header_charm_editor = headers.value("m_header_charm_editor", "STR_NOT_FOUND");
     m_header_player_editor = headers.value("m_header_player_editor", "STR_NOT_FOUND");
     m_header_itembox_editor = headers.value("m_header_itembox_editor", "STR_NOT_FOUND");
     m_header_loadout_editor = headers.value("m_header_loadout_editor", "STR_NOT_FOUND");
+    m_header_charm_filtter = headers.value("m_header_charm_filtter", "STR_NOT_FOUND");
 
     m_label_charms = charm_editor.value("m_label_charms", "STR_NOT_FOUND");
     m_label_none = charm_editor.value("m_label_none", "STR_NOT_FOUND");
@@ -908,6 +991,8 @@ void RiseDataEditor::change_language(Language language) {
     m_rarity_text[11] = m_label_rarity + " 8";
     m_rarity_text[12] = m_label_rarity + " 9";
     m_rarity_text[13] = m_label_rarity + " 10";
+
+    _labelRemainLock = charmFilter.value("_labelRemainLock", "STR_NOT_FOUND");
 }
 
 void RiseDataEditor::export_charms(const std::string& to, const std::vector<Charm>& charms) {
