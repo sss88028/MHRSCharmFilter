@@ -161,9 +161,6 @@
   <ItemGroup>
     <ResourceCompile Include="Resource.rc" />
   </ItemGroup>
-  <ItemGroup>
-    <Image Include="..\..\..\..\Pictures\TDS_Fexty_256x256.png" />
-  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
   </ImportGroup>
