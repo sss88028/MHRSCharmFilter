@@ -40,6 +40,7 @@ struct Charm {
     uint32_t skills[2];
     uint32_t skill_levels[2];
     Rarity rarity;
+    bool IsLocked;
 
     [[nodiscard]] std::string get_name(const std::function<std::string(uint32_t)>& skill_name_getter) const;
 };
@@ -85,10 +86,12 @@ private:
     void render_ui_player_editor() const;
     void render_ui_item_editor();
     void render_ui_loadout_editor() const;
+    void RenderUICharmFilter();
 
     [[nodiscard]] std::string get_save_as_location() const;
     [[nodiscard]] std::string get_open_location() const;
     void change_language(Language language);
+    void ReadDecoSetting();
 
     void export_charms(const std::string& to, const std::vector<Charm>& charms);
     void export_items(const std::string& to, reframework::API::ManagedObject* itembox) const;
@@ -207,6 +210,7 @@ private:
     std::string m_header_player_editor;
     std::string m_header_itembox_editor;
     std::string m_header_loadout_editor;
+    std::string m_header_charm_filtter;
 #pragma endregion
 #pragma region CharmEditor
     std::string m_label_charms;
@@ -257,5 +261,7 @@ private:
 #pragma region LoadoutEditor
     std::string m_button_delete;
 #pragma endregion
-
+#pragma region CharmFilter
+    std::string _labelRemainLock;
+#pragma endregion
 };
