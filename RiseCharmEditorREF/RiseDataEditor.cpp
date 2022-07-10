@@ -19,6 +19,8 @@
 #include <fstream>
 #include <regex>
 #include <vector>
+#include <thread>
+#include <future>
 
 using namespace reframework;
 
@@ -28,13 +30,28 @@ std::shared_ptr<RiseDataEditor> RiseDataEditor::get() {
 }
 
 void RiseDataEditor::render_ui() {
-    if (!m_initialized) {
-        if (!initialize()) {
-            if (ImGui::Begin("Charm Editor##init")) {
+    if (!m_initialized) 
+    {
+        if (!initialize()) 
+        {
+            if (ImGui::Begin("Charm Editor##init")) 
+            {
                 ImGui::TextColored(ImVec4(1, 0, 0, 1), "Initializing...");
                 ImGui::End();
             }
 
+            return;
+        }
+    }
+    if (!_isCharmFilterInited) 
+    {
+        if (!InitializeCharmFilter()) 
+        {
+            if (ImGui::Begin("Charm Filter##init")) 
+            {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "Initializing...");
+                ImGui::End();
+            }
             return;
         }
     }
@@ -89,9 +106,11 @@ void RiseDataEditor::render_ui() {
 
                 ImGui::PopStyleVar();
             }
-            if (ImGui::CollapsingHeader(m_header_charm_filtter.c_str())) 
+            if (ImGui::CollapsingHeader(_headerCharmFiltter.c_str())) 
             {
                 ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {7.0f, 0.2f});
+                
+                RenderUICharmFilter();
 
                 ImGui::PopStyleVar();
             }
@@ -219,6 +238,37 @@ bool RiseDataEditor::initialize() {
 
     m_initialized = true;
     return m_initialized;
+}
+
+bool RiseDataEditor::InitializeCharmFilter() 
+{
+    const auto& api = API::get();
+
+    API::get()->log_info("[RiseDataEditor.InitializeCharmFilter] Get Start");
+    auto facilityDataManager = api->get_managed_singleton("snow.data.FacilityDataManager");
+    if (!facilityDataManager) 
+    {
+        return false;
+    }
+    API::get()->log_info("[RiseDataEditor.InitializeCharmFilter] Get facilityDataManager success");
+
+    auto smithy = *facilityDataManager->get_field<API::ManagedObject*>("_Smithy");
+    if (!smithy) 
+    {
+        return false;
+    }
+    API::get()->log_info("[RiseDataEditor.InitializeCharmFilter] Get smithy success");
+
+    _smithyFunctionObj = *smithy->get_field<API::ManagedObject*>("_Function");
+    if (!_smithyFunctionObj) 
+    {
+        return false;
+    }
+    API::get()->log_info("[RiseDataEditor.InitializeCharmFilter] Get _smithyFunctionObj success");
+
+    _isCharmFilterInited = true;
+
+    return true;
 }
 
 void RiseDataEditor::set_imgui_style() {
@@ -383,8 +433,6 @@ void RiseDataEditor::render_ui_charm_editor() {
         c.skill_levels[1] = utility::call<uint32_t>(levellist, "get_Item", 1);
 
         c.rarity = *entry->get_field<Rarity>("_IdVal");
-
-        c.IsLocked = *entry->get_field<bool>("_IsLock");
 
         return c;
     };
@@ -799,10 +847,13 @@ void RiseDataEditor::render_ui_loadout_editor() const {
         }
     }
 }
-
+bool work(int x) 
+{
+}
 void RiseDataEditor::RenderUICharmFilter() 
 {
-    auto GetCharm = [](const API::ManagedObject* entry) -> Charm {
+    auto GetCharm = [](const API::ManagedObject* entry) -> Charm 
+    {
         Charm c{};
 
         const auto slotlist = *entry->get_field<API::ManagedObject*>("_TalismanDecoSlotNumList");
@@ -831,10 +882,9 @@ void RiseDataEditor::RenderUICharmFilter()
         return c;
     };
 
-    auto get_skillname = [this](uint32_t skill) 
+    auto lockCharm = [](API::ManagedObject* entry, const Charm& charm) 
     {
-        const auto str = utility::call<SystemString*>(m_get_skill_name, skill);
-        return utility::narrow(str->data);
+        *entry->get_field<bool>("_IsLock") = charm.IsLocked;
     };
 
     const auto count = utility::call<uint32_t>(m_inv_list, "get_Count");
@@ -853,24 +903,101 @@ void RiseDataEditor::RenderUICharmFilter()
         }
     }
 
-    auto isRemainLock = false;
-    ImGui::Checkbox(_labelRemainLock.c_str(), &isRemainLock);
-
-    if (ImGui::Button("Export deco")) 
+    if (charms.empty()) 
     {
-        const auto path = get_save_as_location();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+        ImGui::TextWrapped(m_text_waiting_for_game.c_str());
+        ImGui::PopStyleColor();
+        return;
+    }
 
-        auto j = nlohmann::json::array();
-        for (auto i = 0u; i < m_max_skill_id; ++i) 
+    RenderDropDown(charms, _selectedCharm01);
+    ImGui::SameLine();
+    RenderDropDown(charms, _selectedCharm02);
+
+    ImGui::Checkbox(_labelRemainLock.c_str(), &_isKeepLock);
+
+    if (_isFilting) 
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+        ImGui::TextWrapped("Filting");
+        ImGui::PopStyleColor();
+    }
+    else if (ImGui::Button("Filt"))
+    {
+        BuildDecoMap();
+        _isFilting = true;
+        API::get()->log_info("[RiseDataEditor.RenderUICharmFilter] thread id : %d", std::this_thread::get_id());
+
+        auto filtFunc = std::bind(&RiseDataEditor::FiltCharm, this, charms, _isKeepLock);
+        API::get()->log_info("[RiseDataEditor.RenderUICharmFilter] filtFunc");
+
+        auto filtTask = std::async(filtFunc);
+        API::get()->log_info("[RiseDataEditor.RenderUICharmFilter] filtTask");
+    }
+}
+
+void RiseDataEditor::BuildDecoMap() 
+{
+    if (_isDecoMapBuilt) 
+    {
+        return;
+    }
+    uint32_t count = 0;
+    const auto list = GetDecoList(count);
+
+    for (auto i = 0u; i < count; ++i) 
+    {
+        const auto entry = utility::call<API::ManagedObject*>(list, "get_Item", i);
+        auto d = GetDecoData(entry);
+
+        API::get()->log_info("[RiseDataEditor.BuildDecoMap] Skill id : %d", d.SkillId);
+        if (!_decoMap.contains(d.SkillId)) 
         {
-            j.push_back({
-                {"SkillID", static_cast<uint32_t>(i)},
-                {"SkillName", get_skillname(i)}
-                });
+            _decoMap.insert(std::pair<int, std::unordered_map<int, int>>(d.SkillId, std::unordered_map<int, int>{}));
+        }
+        API::get()->log_info("[RiseDataEditor.BuildDecoMap] Skill level : %d", d.SkillLevel);
+        if (_decoMap[d.SkillId].contains(d.SkillLevel)) 
+        {
+            _decoMap[d.SkillId].insert(std::pair<int, int>(d.SkillLevel, d.Size));
         }
 
-        std::ofstream(path) << j.dump();
+        API::get()->log_info("[RiseDataEditor.BuildDecoMap] Size : %d", d.Size);
     }
+    _isDecoMapBuilt = true;
+}
+
+reframework::API::ManagedObject* RiseDataEditor::GetDecoList(uint32_t& count) 
+{
+    const auto decoartionsProductFunc = utility::call<API::ManagedObject*>(_smithyFunctionObj, "get__DecorationsProductFunc");
+
+    const auto list = utility::call<API::ManagedObject*>(decoartionsProductFunc, "get_AllProductList");
+
+    count = utility::call<uint32_t>(list, "get_Count");
+    API::get()->log_info("[RiseDataEditor.GetDecoList] count : %d", count);
+
+    return list;
+}
+
+Deco RiseDataEditor::GetDecoData(reframework::API::ManagedObject* entry) 
+{
+    Deco d{};
+    const auto baseData = utility::call<API::ManagedObject*>(entry, "get_BaseData");
+
+    const auto param = *baseData->get_field<API::ManagedObject*>("_Param");
+
+    const auto decoSize = *param->get_field<uint32_t>("_DecorationLv");
+
+    const auto idList = *param->get_field<API::ManagedObject*>("_SkillIdList");
+    const auto skillId = utility::call<uint32_t>(idList, "get_Item", 0);
+
+    const auto lvList = *param->get_field<API::ManagedObject*>("_SkillLvList");
+    const auto skillLv = utility::call<uint32_t>(lvList, "get_Item", 0);
+
+    d.Size = decoSize;
+    d.SkillId = skillId;
+    d.SkillLevel = skillLv;
+    return d;
 }
 
 std::string RiseDataEditor::get_save_as_location() const {
@@ -935,7 +1062,7 @@ void RiseDataEditor::change_language(Language language) {
     m_header_player_editor = headers.value("m_header_player_editor", "STR_NOT_FOUND");
     m_header_itembox_editor = headers.value("m_header_itembox_editor", "STR_NOT_FOUND");
     m_header_loadout_editor = headers.value("m_header_loadout_editor", "STR_NOT_FOUND");
-    m_header_charm_filtter = headers.value("m_header_charm_filtter", "STR_NOT_FOUND");
+    _headerCharmFiltter = headers.value("HeaderCharmFiltter", "Charm filter");
 
     m_label_charms = charm_editor.value("m_label_charms", "STR_NOT_FOUND");
     m_label_none = charm_editor.value("m_label_none", "STR_NOT_FOUND");
@@ -992,7 +1119,12 @@ void RiseDataEditor::change_language(Language language) {
     m_rarity_text[12] = m_label_rarity + " 9";
     m_rarity_text[13] = m_label_rarity + " 10";
 
-    _labelRemainLock = charmFilter.value("_labelRemainLock", "STR_NOT_FOUND");
+    _labelRemainLock = charmFilter.value("_labelRemainLock", "Keep locked charm");
+}
+
+void RiseDataEditor::ReadDecoSetting() 
+{
+
 }
 
 void RiseDataEditor::export_charms(const std::string& to, const std::vector<Charm>& charms) {
@@ -1073,6 +1205,384 @@ void RiseDataEditor::import_items(const std::string& from, reframework::API::Man
         *id = j[i]["id"];
         *amt = j[i]["amount"];
     }
+}
+
+void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock)
+{
+    API::get()->log_info("[RiseDataEditor.FiltCharm] thread id : %d", std::this_thread::get_id());
+    const auto l = charms.size();
+    auto set = new int[l];
+    memset(set, -1, l * sizeof(int));
+
+    for (auto i = 0; i < l - 1; ++i) 
+    {
+        if (isKeepLock && charms[i].IsLocked) 
+        {
+            continue;
+        }
+
+        if (set[i] >= 0) 
+        {
+            continue;
+        }
+
+        auto c1 = charms[i];
+        for (auto j = i + 1; j < l; ++j) 
+        {
+            auto c2 = charms[j];
+
+            if (isKeepLock && c2.IsLocked) 
+            {
+                continue;
+            }
+
+            if (set[j] >= 0) 
+            {
+                continue;
+            }
+
+            auto res = CompareCharm(c1, c2);
+            if (res == -1) 
+            {
+                Combine(set, j, i);
+            } 
+            else if (res == 1) 
+            {
+                Combine(set, i, j);
+                break;
+            }
+        }
+    }
+    for (auto i = 0; i < l; ++i) 
+    {
+        if (isKeepLock && charms[i].IsLocked)
+        {
+            continue;
+        }
+        charms[i].IsLocked = set[i] == -1;
+    }
+
+    delete []set;
+    _isFilting = false;
+
+    API::get()->log_info("[RiseDataEditor.RenderUICharmFilter] start set");
+    for (auto i = 0u; i < l; i++) 
+    {
+        const auto entry = utility::call<API::ManagedObject*>(m_inv_list, "get_Item", i);
+
+        const auto type = entry->get_field<EquipmentType>("_IdType");
+
+        if (*type == EquipmentType::Talisman) 
+        {
+            *entry->get_field<bool>("_IsLock") = charms[i].IsLocked;
+        }
+    }
+    API::get()->log_info("[RiseDataEditor.FiltCharm] end");
+}
+
+Charm RiseDataEditor::RenderDropDown(const std::vector<Charm>& charms, uint32_t& selectIndex) 
+{
+    auto get_skillname = [this](uint32_t skill) 
+    {
+        const auto str = utility::call<SystemString*>(m_get_skill_name, skill);
+        return utility::narrow(str->data);
+    };
+
+    auto charmCount = charms.size();
+    if (selectIndex >= charmCount) 
+    {
+        selectIndex = static_cast<uint32_t>(charmCount - 1);
+    }
+
+    ImGui::PushItemWidth(250.0f);
+
+    auto charmStr = charms.empty() ? m_label_none : charms[selectIndex].get_name(get_skillname);
+    if (ImGui::BeginCombo(m_label_charms.c_str(), charmStr.c_str())) 
+    {
+        for (auto i = 0u; i < charmCount; ++i) 
+        {
+            const auto& c = charms[i];
+
+            ImGui::PushID(static_cast<int>(i));
+            if (ImGui::Selectable(c.get_name(get_skillname).c_str(), i == selectIndex)) 
+            {
+                selectIndex = i;
+            }
+            ImGui::PopID();
+        }
+
+        ImGui::EndCombo();
+    }
+    ImGui::PopItemWidth();
+    return charms[selectIndex];
+}
+
+int RiseDataEditor::GetParent(const int* set, int child) const
+{
+    auto parent = set[child];
+    while (parent > 0) 
+    {
+        child = parent;
+        parent = set[child];
+    }
+    return child;
+}
+
+void RiseDataEditor::Combine(int*& set, int parent, int child) const 
+{
+    auto parentsParent = GetParent(set, parent);
+    auto childsParent = GetParent(set, child);
+    if (parentsParent >= 0 && childsParent >= 0 && parentsParent == childsParent) 
+    {
+        return;
+    }
+    set[child] = parentsParent;
+}
+
+int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
+{
+    std::unordered_map<int, int> skillPair{};
+    for (auto i = 0; i < 2; ++i) 
+    {
+        if (c1.skills[i] != 0) 
+        {
+            if (!skillPair.count(c1.skills[i])) 
+            {
+                skillPair[c1.skills[i]] = 0;
+            }
+            skillPair[c1.skills[i]] += c1.skill_levels[i];
+        }
+        if (c2.skills[i] != 0) 
+        {
+            if (!skillPair.count(c2.skills[i])) 
+            {
+                skillPair[c2.skills[i]] = 0;
+            }
+            skillPair[c2.skills[i]] -= c2.skill_levels[i];
+        }
+    }
+
+    auto isSkillEqual = true;
+    auto isSkillBigger = true;
+    auto isSkillSmaller = true;
+    for (auto p : skillPair) 
+    {
+        isSkillEqual &= (p.second == 0);
+        isSkillBigger &= (p.second > 0);
+        isSkillSmaller &= (p.second < 0);
+    }
+
+    std::unordered_map<int, int> soltPair{};
+    for (auto i = 0; i < 3; ++i) 
+    {
+        if (c1.slots[i] != 0) 
+        {
+            if (!soltPair.count(c1.slots[i])) 
+            {
+                soltPair[c1.slots[i]] = 0;
+            }
+            soltPair[c1.slots[i]] += 1;
+        }
+        if (c2.slots[i] != 0) 
+        {
+            if (!soltPair.count(c2.slots[i])) 
+            {
+                soltPair[c2.slots[i]] = 0;
+            }
+            soltPair[c2.slots[i]] -= 1;
+        }
+    }
+
+    auto isSoltEqual = true;
+    auto soltBiggerCount = 0;
+    auto soltSmallerCount = 0;
+    for (auto p : soltPair) 
+    {
+        isSoltEqual &= (p.second == 0);
+        soltBiggerCount += p.second;
+        soltSmallerCount += p.second * -1;
+    }
+
+    if (isSkillEqual && isSoltEqual)
+    {
+        return -1;
+    }
+    if (isSkillEqual && soltBiggerCount > 0 && soltSmallerCount == 0) 
+    {
+        return -1;
+    }
+    if (isSkillEqual && soltSmallerCount > 0 && soltBiggerCount == 0) 
+    {
+        return 1;
+    }
+    //Skill equal
+    // slot 4 vs slot 3
+    if (isSkillEqual && soltSmallerCount == soltBiggerCount) 
+    {
+        for (auto size = 4; size > 0; ++size) 
+        {
+            return soltPair[size] > 0 ? -1 : 1;
+        }
+    }
+    if (isSkillEqual && !isSoltEqual) 
+    {
+        return 0;
+    }
+
+    // check c1 > c2
+    auto isC1Bigger = true;
+    {
+        std::vector<std::vector<std::map<int, int, std::greater<int>>>> tempDecoSet{};
+        auto setPairCount = 1;
+        for (auto skill : skillPair) 
+        {
+            if (skill.second >= 0) 
+            {
+                continue;
+            }
+            auto skillId = skill.first;
+            if (!_decoMap.contains(skillId)) 
+            {
+                isC1Bigger = false;
+                break;
+            }
+            std::vector<std::map<int, int, std::greater<int>>> tempVector{};
+
+            auto skillLv = skill.second * -1;
+
+            for (auto i = skillLv; i >= 1; --i) 
+            {
+                std::map<int, int, std::greater<int>> skilledSlotPair{};
+                auto skillSize = _decoMap.at(skillId);
+                if (!skillSize.contains(i)) 
+                {
+                    continue;
+                }
+
+                skilledSlotPair.insert(std::pair<int, int>(i, skillLv / i));
+                auto remain = skillLv % i;
+                if (remain > 0 && skillSize.contains(remain)) 
+                {
+                    skilledSlotPair.insert(std::pair<int,int>(i, remain));
+                    break;
+                }
+                tempVector.push_back(skilledSlotPair);
+            }
+            setPairCount *= tempVector.size();
+            tempDecoSet.push_back(tempVector);
+        }
+        for (auto i = 0; i < setPairCount; ++i) 
+        {
+            auto canSolve = true;
+            auto tempSoltPair = soltPair;
+            for (auto set : tempDecoSet) 
+            {
+                for (auto temp : set[i % set.size()]) 
+                {
+                    if (tempSoltPair.contains(temp.first) && tempSoltPair[temp.first] >= temp.second) 
+                    {
+                        tempSoltPair[temp.first] -= temp.second;
+                    } 
+                    else 
+                    {
+                        canSolve = false;
+                        break;
+                    }
+                }
+                if (!canSolve) 
+                {
+                    break;
+                }
+            }
+            if (canSolve) {
+                isC1Bigger = true;
+                break;
+            }
+        }
+
+        // check c2 > c1
+        auto isC2Bigger = false;
+        {
+            std::vector<std::vector<std::map<int, int, std::greater<int>>>> tempDecoSet{};
+            auto setPairCount = 1;
+            for (auto skill : skillPair) 
+            {
+                if (skill.second <= 0) 
+                {
+                    continue;
+                }
+                auto skillId = skill.first;
+                if (!_decoMap.contains(skillId)) 
+                {
+                    isC2Bigger = false;
+                    break;
+                }
+                std::vector<std::map<int, int, std::greater<int>>> tempVector{};
+
+                auto skillLv = skill.second;
+
+                for (auto i = skillLv; i >= 1; --i) 
+                {
+                    std::map<int, int, std::greater<int>> skilledSlotPair{};
+                    auto skillSize = _decoMap.at(skillId);
+                    if (!skillSize.contains(i)) 
+                    {
+                        continue;
+                    }
+
+                    skilledSlotPair.insert(std::pair<int, int>(i, skillLv / i));
+                    auto remain = skillLv % i;
+                    if (remain > 0 && skillSize.contains(remain)) 
+                    {
+                        skilledSlotPair.insert(std::pair<int, int>(i, remain));
+                        break;
+                    }
+                    tempVector.push_back(skilledSlotPair);
+                }
+                setPairCount *= tempVector.size();
+                tempDecoSet.push_back(tempVector);
+            }
+            for (auto i = 0; i < setPairCount; ++i) 
+            {
+                auto canSolve = true;
+                auto tempSoltPair = soltPair;
+                for (auto set : tempDecoSet) 
+                {
+                    for (auto temp : set[i % set.size()]) 
+                    {
+                        if (tempSoltPair.contains(temp.first) && tempSoltPair[temp.first] <= temp.second * -1) 
+                        {
+                            tempSoltPair[temp.first] += temp.second;
+                        } 
+                        else 
+                        {
+                            canSolve = false;
+                            break;
+                        }
+                    }
+                    if (!canSolve) 
+                    {
+                        break;
+                    }
+                }
+                if (canSolve) 
+                {
+                    isC2Bigger = true;
+                    break;
+                }
+            }
+        }
+        if (isC1Bigger && !isC2Bigger) 
+        {
+            return -1;
+        }
+        else if (!isC1Bigger && isC2Bigger) 
+        {
+            return 1;
+        }
+    }
+
+    return 0;
 }
 
 void RiseDataEditor::change_language_hook(API::VMContext* vmctx, API::ManagedObject* this_, Language language, bool fade, void* _) {
