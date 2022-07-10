@@ -7,6 +7,7 @@
 #include <memory>
 #include <string>
 #include <unordered_map>
+#include <future>
 
 enum class EquipmentType : int32_t {
     Empty,
@@ -33,7 +34,8 @@ enum class Rarity : uint32_t {
     Rarity10 = 0x1010000D
 };
 
-struct Charm {
+struct Charm 
+{
     EquipmentType type;
     uint32_t box_slot;
     uint32_t slots[3];
@@ -43,6 +45,13 @@ struct Charm {
     bool IsLocked;
 
     [[nodiscard]] std::string get_name(const std::function<std::string(uint32_t)>& skill_name_getter) const;
+};
+
+struct Deco 
+{
+    uint32_t SkillId;
+    uint32_t SkillLevel;
+    uint32_t Size;
 };
 
 enum class Language : int32_t {
@@ -75,6 +84,7 @@ public:
 
 private:
     bool initialize();
+    bool InitializeCharmFilter();
 
     static uint32_t* slot_count_to_slots(const uint32_t counts[3], uint32_t slots[3]);
     static uint32_t* slots_to_slot_count(const uint32_t slots[3], uint32_t counts[3]);
@@ -87,6 +97,9 @@ private:
     void render_ui_item_editor();
     void render_ui_loadout_editor() const;
     void RenderUICharmFilter();
+    void BuildDecoMap();
+    reframework::API::ManagedObject* GetDecoList(uint32_t& count);
+    Deco GetDecoData(reframework::API::ManagedObject* entry);
 
     [[nodiscard]] std::string get_save_as_location() const;
     [[nodiscard]] std::string get_open_location() const;
@@ -97,6 +110,12 @@ private:
     void export_items(const std::string& to, reframework::API::ManagedObject* itembox) const;
     std::vector<Charm> import_charms(const std::string& from);
     void import_items(const std::string& from, reframework::API::ManagedObject* itembox) const;
+    
+    int GetParent(const int* set, int child) const;
+    void Combine(int*& set, int parent, int child) const;
+    int CompareCharm(const Charm& c1, const Charm& c2) const;
+    void FiltCharm(std::vector<Charm>& charms, const bool isKeepLock);
+    Charm RenderDropDown(const std::vector<Charm>& charms, uint32_t& selectIndex);
 
     static void change_language_hook(
         reframework::API::VMContext* vmctx, reframework::API::ManagedObject* this_, Language language, bool fade, void* _);
@@ -119,6 +138,17 @@ private:
     reframework::API::Method* m_get_weapon_name{};
     reframework::API::TypeDefinition* m_skill_id{};
     reframework::API::TypeDefinition* m_item_id{};
+
+    reframework::API::ManagedObject* _smithyFunctionObj{};
+    reframework::API::Method* _getDecoartionsProductFunc{};
+    reframework::API::Method* _getAllProductListFunc{};
+    bool _isCharmFilterInited = false;
+    bool _isDecoMapBuilt = false;
+    std::atomic_bool _isFilting = false;
+    std::atomic_bool _isNeedSet = false;
+    std::unordered_map<int, std::unordered_map<int, int>> _decoMap{};
+    std::unordered_map<int, int> _test{};
+
     uint32_t m_max_skill_id = 0;
     uint32_t m_min_item_id = 0;
     uint32_t m_max_item_id = 0;
@@ -133,6 +163,10 @@ private:
     void (*m_original_action_func)(void*, void*, void*, uint8_t, uint16_t){};
     void (*m_original_change_language)(reframework::API::VMContext*, reframework::API::ManagedObject*, Language, bool, void*){};
     void (*m_original_update_cheat_flag)(void*, reframework::API::ManagedObject*){};
+
+    bool _isKeepLock = false;
+    uint32_t _selectedCharm01 = 0;
+    uint32_t _selectedCharm02 = 0;
 
     ImFont* m_font_latin_cyrillic{};
     ImFont* m_font_chinese_japanese{};
@@ -210,7 +244,7 @@ private:
     std::string m_header_player_editor;
     std::string m_header_itembox_editor;
     std::string m_header_loadout_editor;
-    std::string m_header_charm_filtter;
+    std::string _headerCharmFiltter;
 #pragma endregion
 #pragma region CharmEditor
     std::string m_label_charms;
