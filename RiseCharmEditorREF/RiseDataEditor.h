@@ -38,9 +38,9 @@ struct Charm
 {
     EquipmentType type;
     uint32_t box_slot;
-    uint32_t slots[3];
-    uint32_t skills[2];
-    uint32_t skill_levels[2];
+    uint32_t Slots[3];
+    uint32_t Skills[2];
+    uint32_t SkillLevels[2];
     Rarity rarity;
     bool IsLocked;
 
