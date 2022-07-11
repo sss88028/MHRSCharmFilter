@@ -440,17 +440,17 @@ void RiseDataEditor::render_ui_charm_editor() {
         counts[2] = utility::call<uint32_t>(slotlist, "get_Item", 3);
         counts[3] = utility::call<uint32_t>(slotlist, "get_Item", 4);
 
-        slot_count_to_slots(counts, c.slots);
+        slot_count_to_slots(counts, c.Slots);
 
         const auto skilllist = *entry->get_field<API::ManagedObject*>("_TalismanSkillIdList");
 
-        c.skills[0] = utility::call<uint32_t>(skilllist, "get_Item", 0);
-        c.skills[1] = utility::call<uint32_t>(skilllist, "get_Item", 1);
+        c.Skills[0] = utility::call<uint32_t>(skilllist, "get_Item", 0);
+        c.Skills[1] = utility::call<uint32_t>(skilllist, "get_Item", 1);
 
         const auto levellist = *entry->get_field<API::ManagedObject*>("_TalismanSkillLvList");
 
-        c.skill_levels[0] = utility::call<uint32_t>(levellist, "get_Item", 0);
-        c.skill_levels[1] = utility::call<uint32_t>(levellist, "get_Item", 1);
+        c.SkillLevels[0] = utility::call<uint32_t>(levellist, "get_Item", 0);
+        c.SkillLevels[1] = utility::call<uint32_t>(levellist, "get_Item", 1);
 
         c.rarity = *entry->get_field<Rarity>("_IdVal");
 
@@ -463,7 +463,7 @@ void RiseDataEditor::render_ui_charm_editor() {
         const auto slotlist = *entry->get_field<API::ManagedObject*>("_TalismanDecoSlotNumList");
 
         uint32_t counts[4]{};
-        slots_to_slot_count(charm.slots, counts);
+        slots_to_slot_count(charm.Slots, counts);
 
         utility::call<>(slotlist, "set_Item", 1, counts[0]);
         utility::call<>(slotlist, "set_Item", 2, counts[1]);
@@ -472,13 +472,13 @@ void RiseDataEditor::render_ui_charm_editor() {
 
         const auto skilllist = *entry->get_field<API::ManagedObject*>("_TalismanSkillIdList");
 
-        utility::call<>(skilllist, "set_Item", 0, charm.skills[0]);
-        utility::call<>(skilllist, "set_Item", 1, charm.skills[1]);
+        utility::call<>(skilllist, "set_Item", 0, charm.Skills[0]);
+        utility::call<>(skilllist, "set_Item", 1, charm.Skills[1]);
 
         const auto levellist = *entry->get_field<API::ManagedObject*>("_TalismanSkillLvList");
 
-        utility::call<>(levellist, "set_Item", 0, charm.skill_levels[0]);
-        utility::call<>(levellist, "set_Item", 1, charm.skill_levels[1]);
+        utility::call<>(levellist, "set_Item", 0, charm.SkillLevels[0]);
+        utility::call<>(levellist, "set_Item", 1, charm.SkillLevels[1]);
 
         *entry->get_field<Rarity>("_IdVal") = charm.rarity;
     };
@@ -593,7 +593,7 @@ void RiseDataEditor::render_ui_charm_editor() {
 
         for (auto i = 0; i < 2; ++i) {
             ImGui::PushID(i + 10);
-            auto& skill = charm.skills[i];
+            auto& skill = charm.Skills[i];
 
             if (ImGui::BeginCombo(fmt::format("{} {}", m_label_skill, i + 1).c_str(), get_skillname(skill).c_str())) {
                 for (auto j = 0u; j < m_max_skill_id; ++j) {
@@ -605,15 +605,15 @@ void RiseDataEditor::render_ui_charm_editor() {
             }
 
             ImGui::SameLine();
-            ImGui::SliderInt(fmt::format("{}##level{}", m_label_level, i).c_str(), reinterpret_cast<int*>(&charm.skill_levels[i]), 0,
-                get_max_skill_level(charm.skills[i]));
+            ImGui::SliderInt(fmt::format("{}##level{}", m_label_level, i).c_str(), reinterpret_cast<int*>(&charm.SkillLevels[i]), 0,
+                get_max_skill_level(charm.Skills[i]));
 
             ImGui::PopID();
         }
 
-        ImGui::SliderInt((m_label_slot + " 1").c_str(), reinterpret_cast<int*>(&charm.slots[0]), 0, 4);
-        ImGui::SliderInt((m_label_slot + " 2").c_str(), reinterpret_cast<int*>(&charm.slots[1]), 0, static_cast<int>(charm.slots[0]));
-        ImGui::SliderInt((m_label_slot + " 3").c_str(), reinterpret_cast<int*>(&charm.slots[2]), 0, static_cast<int>(charm.slots[1]));
+        ImGui::SliderInt((m_label_slot + " 1").c_str(), reinterpret_cast<int*>(&charm.Slots[0]), 0, 4);
+        ImGui::SliderInt((m_label_slot + " 2").c_str(), reinterpret_cast<int*>(&charm.Slots[1]), 0, static_cast<int>(charm.Slots[0]));
+        ImGui::SliderInt((m_label_slot + " 3").c_str(), reinterpret_cast<int*>(&charm.Slots[2]), 0, static_cast<int>(charm.Slots[1]));
 
         ImGui::Separator();
         if (ImGui::Button(m_button_make_legal.c_str())) {
@@ -622,7 +622,6 @@ void RiseDataEditor::render_ui_charm_editor() {
 
         ImGui::SameLine();
         ImGui::Checkbox(m_checkbox_disable_sanity_check.c_str(), &m_disable_sanity_check);
-
         ImGui::PopItemWidth();
 
         if (!was_sold) {
@@ -908,17 +907,17 @@ void RiseDataEditor::RenderUICharmFilter()
         counts[1] = utility::call<uint32_t>(slotlist, "get_Item", 2);
         counts[2] = utility::call<uint32_t>(slotlist, "get_Item", 3);
 
-        slot_count_to_slots(counts, c.slots);
+        slot_count_to_slots(counts, c.Slots);
 
         const auto skilllist = *entry->get_field<API::ManagedObject*>("_TalismanSkillIdList");
 
-        c.skills[0] = utility::call<uint32_t>(skilllist, "get_Item", 0);
-        c.skills[1] = utility::call<uint32_t>(skilllist, "get_Item", 1);
+        c.Skills[0] = utility::call<uint32_t>(skilllist, "get_Item", 0);
+        c.Skills[1] = utility::call<uint32_t>(skilllist, "get_Item", 1);
 
         const auto levellist = *entry->get_field<API::ManagedObject*>("_TalismanSkillLvList");
 
-        c.skill_levels[0] = utility::call<uint32_t>(levellist, "get_Item", 0);
-        c.skill_levels[1] = utility::call<uint32_t>(levellist, "get_Item", 1);
+        c.SkillLevels[0] = utility::call<uint32_t>(levellist, "get_Item", 0);
+        c.SkillLevels[1] = utility::call<uint32_t>(levellist, "get_Item", 1);
 
         c.rarity = *entry->get_field<Rarity>("_IdVal");
 
@@ -1189,9 +1188,9 @@ void RiseDataEditor::export_charms(const std::string& to, const std::vector<Char
     for (const auto& charm : charms) {
         j.push_back({
             {"Rarity", static_cast<uint32_t>(charm.rarity)},
-            {"Skills", {charm.skills[0], charm.skills[1]}},
-            {"SkillLevels", {charm.skill_levels[0], charm.skill_levels[1]}},
-            {"Slots", {charm.slots[0], charm.slots[1], charm.slots[2]}}
+            {"Skills", {charm.Skills[0], charm.Skills[1]}},
+            {"SkillLevels", {charm.SkillLevels[0], charm.SkillLevels[1]}},
+            {"Slots", {charm.Slots[0], charm.Slots[1], charm.Slots[2]}}
         });
     }
 
@@ -1399,7 +1398,7 @@ void RiseDataEditor::Combine(int*& set, int parent, int child) const
 
 int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const 
 {
-    auto lockCharm = [](int remainLv, int curLv) 
+    auto lockCharm = [](int remainLv, int curLv, std::map<int, int>) 
     { 
         if (remainLv == 0) 
         {
@@ -1411,21 +1410,21 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
     std::unordered_map<int, int> skillPair{};
     for (auto i = 0; i < 2; ++i) 
     {
-        if (c1.skills[i] != 0) 
+        if (c1.Skills[i] != 0) 
         {
-            if (!skillPair.count(c1.skills[i])) 
+            if (!skillPair.count(c1.Skills[i])) 
             {
-                skillPair[c1.skills[i]] = 0;
+                skillPair[c1.Skills[i]] = 0;
             }
-            skillPair[c1.skills[i]] += c1.skill_levels[i];
+            skillPair[c1.Skills[i]] += c1.SkillLevels[i];
         }
-        if (c2.skills[i] != 0) 
+        if (c2.Skills[i] != 0) 
         {
-            if (!skillPair.count(c2.skills[i])) 
+            if (!skillPair.count(c2.Skills[i])) 
             {
-                skillPair[c2.skills[i]] = 0;
+                skillPair[c2.Skills[i]] = 0;
             }
-            skillPair[c2.skills[i]] -= c2.skill_levels[i];
+            skillPair[c2.Skills[i]] -= c2.SkillLevels[i];
         }
     }
 
@@ -1444,25 +1443,25 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
     std::unordered_map<int, int> soltPair{};
     for (auto i = 0; i < 3; ++i) 
     {
-        if (c1.slots[i] != 0) 
+        if (c1.Slots[i] != 0) 
         {
-            if (!soltPair.count(c1.slots[i])) 
+            if (!soltPair.count(c1.Slots[i])) 
             {
-                soltPair[c1.slots[i]] = 0;
+                soltPair[c1.Slots[i]] = 0;
             }
-            soltPair[c1.slots[i]] += 1;
+            soltPair[c1.Slots[i]] += 1;
 
-            API::get()->log_info(fmt::format("[RiseDataEditor.CompareCharm] c1, size : {}", c1.slots[i]).c_str());
+            API::get()->log_info(fmt::format("[RiseDataEditor.CompareCharm] c1, size : {}", c1.Slots[i]).c_str());
 
         }
-        if (c2.slots[i] != 0) 
+        if (c2.Slots[i] != 0) 
         {
-            if (!soltPair.count(c2.slots[i])) 
+            if (!soltPair.count(c2.Slots[i])) 
             {
-                soltPair[c2.slots[i]] = 0;
+                soltPair[c2.Slots[i]] = 0;
             }
-            soltPair[c2.slots[i]] -= 1;
-            API::get()->log_info(fmt::format("[RiseDataEditor.CompareCharm] c2, size : {}", c2.slots[i]).c_str());
+            soltPair[c2.Slots[i]] -= 1;
+            API::get()->log_info(fmt::format("[RiseDataEditor.CompareCharm] c2, size : {}", c2.Slots[i]).c_str());
         }
     }
 
@@ -1738,8 +1737,8 @@ void RiseDataEditor::update_cheat_flag_hook(void* vmctx, reframework::API::Manag
 std::string Charm::get_name(const std::function<std::string(uint32_t)>& skill_name_getter) const {
     return fmt::format(
         "{} {} | {} {} | {}-{}-{}", 
-        skill_name_getter(skills[0]), skill_levels[0],
-        skill_name_getter(skills[1]), skill_levels[1],
-        slots[0], slots[1], slots[2]
+        skill_name_getter(Skills[0]), SkillLevels[0],
+        skill_name_getter(Skills[1]), SkillLevels[1],
+        Slots[0], Slots[1], Slots[2]
     );
 }
