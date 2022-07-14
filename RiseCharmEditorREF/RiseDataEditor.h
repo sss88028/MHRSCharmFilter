@@ -115,7 +115,7 @@ private:
     void Combine(int*& set, int parent, int child) const;
     int CompareCharm(const Charm& c1, const Charm& c2) const;
     void FiltCharm(std::vector<Charm>& charms, const bool isKeepLock);
-    Charm RenderDropDown(const std::vector<Charm>& charms, uint32_t& selectIndex);
+    Charm RenderDropDown(const int id, const std::vector<Charm>& charms, uint32_t& selectIndex);
 
     static void change_language_hook(
         reframework::API::VMContext* vmctx, reframework::API::ManagedObject* this_, Language language, bool fade, void* _);
@@ -164,6 +164,7 @@ private:
     bool _isKeepLock = false;
     uint32_t _selectedCharm01 = 0;
     uint32_t _selectedCharm02 = 0;
+    int _compareResult = 0;
 
     ImFont* m_font_latin_cyrillic{};
     ImFont* m_font_chinese_japanese{};
