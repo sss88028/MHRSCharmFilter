@@ -956,16 +956,9 @@ void RiseDataEditor::RenderUICharmFilter()
         return;
     }
 
-    auto c1 = RenderDropDown(10, charms, _selectedCharm01);
+    RenderDropDown(charms, _selectedCharm01);
     ImGui::SameLine();
-    auto c2 = RenderDropDown(20, charms, _selectedCharm02);
-    if (ImGui::Button("Test compare")) 
-    {
-        _compareResult = CompareCharm(c1, c2);
-    }
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-    ImGui::TextWrapped(fmt::format("compare result {}", _compareResult).c_str());
-    ImGui::PopStyleColor();
+    RenderDropDown(charms, _selectedCharm02);
 
     ImGui::Checkbox(_labelRemainLock.c_str(), &_isKeepLock);
 
@@ -1336,7 +1329,7 @@ void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock
     API::get()->log_info("[RiseDataEditor.FiltCharm] end");
 }
 
-Charm RiseDataEditor::RenderDropDown(const int id, const std::vector<Charm>& charms, uint32_t& selectIndex) 
+Charm RiseDataEditor::RenderDropDown(const std::vector<Charm>& charms, uint32_t& selectIndex) 
 {
     auto get_skillname = [this](uint32_t skill) 
     {
@@ -1352,7 +1345,6 @@ Charm RiseDataEditor::RenderDropDown(const int id, const std::vector<Charm>& cha
 
     ImGui::PushItemWidth(250.0f);
 
-    ImGui::PushID(id);
     auto charmStr = charms.empty() ? m_label_none : charms[selectIndex].get_name(get_skillname);
     if (ImGui::BeginCombo(m_label_charms.c_str(), charmStr.c_str())) 
     {
@@ -1370,7 +1362,6 @@ Charm RiseDataEditor::RenderDropDown(const int id, const std::vector<Charm>& cha
 
         ImGui::EndCombo();
     }
-    ImGui::PopID();
     ImGui::PopItemWidth();
     return charms[selectIndex];
 }
@@ -1397,17 +1388,8 @@ void RiseDataEditor::Combine(int*& set, int parent, int child) const
     set[child] = parentsParent;
 }
 
-int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const 
+int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
 {
-    auto lockCharm = [](int remainLv, int curLv) 
-    { 
-        if (remainLv == 0) 
-        {
-            return true;
-        }
-        return true;
-    };
-
     std::unordered_map<int, int> skillPair{};
     for (auto i = 0; i < 2; ++i) 
     {
@@ -1438,8 +1420,6 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
         isSkillBigger &= (p.second > 0);
         isSkillSmaller &= (p.second < 0);
     }
-    API::get()->log_info(
-        fmt::format("[RiseDataEditor.CompareCharm] isSkillEqual : {}, isSkillBigger : {}, isSkillSmaller : {}", isSkillEqual, isSkillBigger, isSkillSmaller).c_str());
 
     std::unordered_map<int, int> soltPair{};
     for (auto i = 0; i < 3; ++i) 
@@ -1451,9 +1431,6 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
                 soltPair[c1.slots[i]] = 0;
             }
             soltPair[c1.slots[i]] += 1;
-
-            API::get()->log_info(fmt::format("[RiseDataEditor.CompareCharm] c1, size : {}", c1.slots[i]).c_str());
-
         }
         if (c2.slots[i] != 0) 
         {
@@ -1462,7 +1439,6 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
                 soltPair[c2.slots[i]] = 0;
             }
             soltPair[c2.slots[i]] -= 1;
-            API::get()->log_info(fmt::format("[RiseDataEditor.CompareCharm] c2, size : {}", c2.slots[i]).c_str());
         }
     }
 
@@ -1472,26 +1448,20 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
     for (auto p : soltPair) 
     {
         isSoltEqual &= (p.second == 0);
-        soltBiggerCount += p.second > 0 ? p.second : 0;
-        soltSmallerCount -= p.second < 0 ? p.second : 0;
+        soltBiggerCount += p.second;
+        soltSmallerCount += p.second * -1;
     }
-    API::get()->log_info(
-        fmt::format("[RiseDataEditor.CompareCharm] isSoltEqual : {}, soltBiggerCount : {}, soltSmallerCount : {}", isSoltEqual, soltBiggerCount, soltSmallerCount)
-            .c_str());
 
     if (isSkillEqual && isSoltEqual)
     {
-        API::get()->log_info("[RiseDataEditor.CompareCharm] 0 -1");
         return -1;
     }
-    if ((isSkillEqual || isSkillBigger) && soltBiggerCount > 0 && soltSmallerCount == 0) 
+    if (isSkillEqual && soltBiggerCount > 0 && soltSmallerCount == 0) 
     {
-        API::get()->log_info("[RiseDataEditor.CompareCharm] 1 -1");
         return -1;
     }
-    if ((isSkillEqual || isSkillSmaller) && soltSmallerCount > 0 && soltBiggerCount == 0) 
+    if (isSkillEqual && soltSmallerCount > 0 && soltBiggerCount == 0) 
     {
-        API::get()->log_info("[RiseDataEditor.CompareCharm] 2 1");
         return 1;
     }
     //Skill equal
@@ -1500,13 +1470,11 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
     {
         for (auto size = 4; size > 0; ++size) 
         {
-            API::get()->log_info("[RiseDataEditor.CompareCharm] 3 %d", soltPair[size]);
             return soltPair[size] > 0 ? -1 : 1;
         }
     }
     if (isSkillEqual && !isSoltEqual) 
     {
-        API::get()->log_info("[RiseDataEditor.CompareCharm] 4 0");
         return 0;
     }
 
@@ -1542,11 +1510,11 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
 
                 skilledSlotPair.insert(std::pair<int, int>(i, skillLv / i));
                 auto remain = skillLv % i;
-                if (remain > 0 && !skillSize.contains(remain)) 
+                if (remain > 0 && skillSize.contains(remain)) 
                 {
+                    skilledSlotPair.insert(std::pair<int,int>(i, remain));
                     break;
                 }
-                skilledSlotPair.insert(std::pair<int,int>(i, remain));
                 tempVector.push_back(skilledSlotPair);
             }
             setPairCount *= tempVector.size();
@@ -1575,8 +1543,7 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
                     break;
                 }
             }
-            if (canSolve) 
-            {
+            if (canSolve) {
                 isC1Bigger = true;
                 break;
             }
@@ -1656,16 +1623,13 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
         }
         if (isC1Bigger && !isC2Bigger) 
         {
-            API::get()->log_info("[RiseDataEditor.CompareCharm] 5 -1");
             return -1;
         }
         else if (!isC1Bigger && isC2Bigger) 
         {
-            API::get()->log_info("[RiseDataEditor.CompareCharm] 6 -1");
             return 1;
         }
     }
-    API::get()->log_info("[RiseDataEditor.CompareCharm] 7 -1");
 
     return 0;
 }
