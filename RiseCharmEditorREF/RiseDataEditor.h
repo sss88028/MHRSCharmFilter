@@ -8,6 +8,7 @@
 #include <string>
 #include <unordered_map>
 #include <future>
+#include <map>
 #include <stack>
 
 enum class EquipmentType : int32_t {
