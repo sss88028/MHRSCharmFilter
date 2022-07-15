@@ -117,6 +117,14 @@ void RiseDataEditor::render_ui() {
 
                 ImGui::PopStyleVar();
             }
+            if (ImGui::CollapsingHeader("Filter Debug"))
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, { 7.0f, 0.2f });
+
+                RenderUICharmFilterDebug();
+
+                ImGui::PopStyleVar();
+            }
             ImGui::End();
         }
     }
@@ -897,56 +905,12 @@ void RiseDataEditor::render_ui_loadout_editor() const {
 
 void RiseDataEditor::RenderUICharmFilter() 
 {
-    auto GetCharm = [](const API::ManagedObject* entry) -> Charm 
-    {
-        Charm c{};
-
-        const auto slotlist = *entry->get_field<API::ManagedObject*>("_TalismanDecoSlotNumList");
-        uint32_t counts[3]{};
-
-        counts[0] = utility::call<uint32_t>(slotlist, "get_Item", 1);
-        counts[1] = utility::call<uint32_t>(slotlist, "get_Item", 2);
-        counts[2] = utility::call<uint32_t>(slotlist, "get_Item", 3);
-
-        slot_count_to_slots(counts, c.slots);
-
-        const auto skilllist = *entry->get_field<API::ManagedObject*>("_TalismanSkillIdList");
-
-        c.skills[0] = utility::call<uint32_t>(skilllist, "get_Item", 0);
-        c.skills[1] = utility::call<uint32_t>(skilllist, "get_Item", 1);
-
-        const auto levellist = *entry->get_field<API::ManagedObject*>("_TalismanSkillLvList");
-
-        c.skill_levels[0] = utility::call<uint32_t>(levellist, "get_Item", 0);
-        c.skill_levels[1] = utility::call<uint32_t>(levellist, "get_Item", 1);
-
-        c.rarity = *entry->get_field<Rarity>("_IdVal");
-
-        c.IsLocked = *entry->get_field<bool>("_IsLock");
-
-        return c;
-    };
-
     auto lockCharm = [](API::ManagedObject* entry, const Charm& charm) 
     {
         *entry->get_field<bool>("_IsLock") = charm.IsLocked;
     };
 
-    const auto count = utility::call<uint32_t>(m_inv_list, "get_Count");
-    std::vector<Charm> charms;
-
-    for (auto i = 0u; i < count; i++) 
-    {
-        const auto entry = utility::call<API::ManagedObject*>(m_inv_list, "get_Item", i);
-        const auto type = entry->get_field<EquipmentType>("_IdType");
-
-        if (*type == EquipmentType::Talisman) 
-        {
-            auto& c = charms.emplace_back(GetCharm(entry));
-            c.box_slot = i;
-            c.type = *type;
-        }
-    }
+    std::vector<Charm> charms = GetCharms();
 
     if (charms.empty()) 
     {
@@ -955,17 +919,6 @@ void RiseDataEditor::RenderUICharmFilter()
         ImGui::PopStyleColor();
         return;
     }
-
-    auto c1 = RenderDropDown(10, charms, _selectedCharm01);
-    ImGui::SameLine();
-    auto c2 = RenderDropDown(20, charms, _selectedCharm02);
-    if (ImGui::Button("Test compare")) 
-    {
-        _compareResult = CompareCharm(c1, c2);
-    }
-    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-    ImGui::TextWrapped(fmt::format("compare result {}", _compareResult).c_str());
-    ImGui::PopStyleColor();
 
     ImGui::Checkbox(_labelRemainLock.c_str(), &_isKeepLock);
 
@@ -986,6 +939,66 @@ void RiseDataEditor::RenderUICharmFilter()
 
         auto filtTask = std::async(filtFunc);
         API::get()->log_info("[RiseDataEditor.RenderUICharmFilter] filtTask");
+    }
+}
+
+void RiseDataEditor::RenderUICharmFilterDebug()
+{
+    std::vector<Charm> charms = GetCharms();
+
+    if (charms.empty())
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+        ImGui::TextWrapped(m_text_waiting_for_game.c_str());
+        ImGui::PopStyleColor();
+        return;
+    }
+
+    auto c1 = RenderDropDown(10, charms, _selectedCharm01);
+    ImGui::SameLine();
+    auto c2 = RenderDropDown(20, charms, _selectedCharm02);
+    if (_lastSelectedCharm01 != _selectedCharm01 || _lastSelectedCharm02 != _selectedCharm02)
+    {
+        _compareResult = CompareCharm(c1, c2);
+        _lastSelectedCharm01 = _selectedCharm01;
+        _lastSelectedCharm02 = _selectedCharm02;
+    }
+    ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+    ImGui::TextWrapped(fmt::format("compare result {}", _compareResult).c_str());
+    ImGui::PopStyleColor();
+
+    auto c3 = RenderDropDown(30, charms, _selectedCharm03);
+    if (_selectedCharm03 != _lastSelectedCharm03)
+    {
+        _lastSelectedCharm03 = _selectedCharm03;
+        _hasPair = false;
+    }
+    if (ImGui::Button("Find"))
+    {
+        for (auto c : charms) 
+        {
+            if (c.box_slot != c3.box_slot) 
+            {
+                auto res = CompareCharm(c3, c);
+                if (res == 1) 
+                {
+                    _hasPair = true;
+                    _pairCharm = c;
+                    break;
+                }
+            }
+        }
+    }
+    if (_hasPair)
+    {
+        auto get_skillname = [this](uint32_t skill)
+        {
+            const auto str = utility::call<SystemString*>(m_get_skill_name, skill);
+            return utility::narrow(str->data);
+        };
+        auto name = _pairCharm.get_name(get_skillname);
+
+        ImGui::TextWrapped(fmt::format("{}", name).c_str());
     }
 }
 
@@ -1374,21 +1387,27 @@ bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unorder
     {
         return false;
     }
-    for (auto i = 0; i < setPairCount; ++i)
+
+    std::vector<std::vector<std::vector<std::tuple<int, int>>>> output;
+    std::vector<std::vector<std::tuple<int, int>>> temp;
+    std::vector<std::vector<int>> v;
+    GenAll(output, tempDecoSet, temp);
+    for (auto pair : output)
     {
         auto canSolve = true;
         auto tempSoltPair = slots;
-        for (auto set : tempDecoSet)
+        for (auto set : pair)
         {
-            for (auto temp : set[i % set.size()])
+            for (auto temp : set)
             {
                 auto needCount = std::get<1>(temp);
                 auto decoSize = std::get<0>(temp);
                 for (auto startSize = decoSize; startSize > 0; --startSize)
                 {
-                    if (tempSoltPair[startSize] < needCount)
+                    if (!tempSoltPair.contains(startSize) || tempSoltPair[startSize] < needCount)
                     {
                         canSolve = false;
+                        isCanSolve = false;
                         break;
                     }
                     tempSoltPair[startSize] -= needCount;
@@ -1398,13 +1417,17 @@ bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unorder
                     break;
                 }
             }
-            if (canSolve)
+            if (!canSolve)
             {
-                return true;
+                break;
             }
         }
+        if (canSolve)
+        {
+            return true;
+        }
     }
-    return isCanSolve;
+    return false;
 }
 
 std::vector<std::vector<std::tuple<int, int>>> RiseDataEditor::Build(std::map<int, int, std::greater<int>> candidates, int target)
@@ -1445,6 +1468,22 @@ void RiseDataEditor::CombinationSum(std::vector<std::vector<std::tuple<int, int>
     }
 }
 
+void RiseDataEditor::GenAll(std::vector<std::vector<std::vector<std::tuple<int, int>>>>& output, std::vector<std::vector<std::vector<std::tuple<int, int>>>> const& input, std::vector<std::vector<std::tuple<int, int>>>& cur, unsigned cur_row)
+{
+    if (cur_row >= input.size())
+    {
+        output.push_back(cur);
+        return;
+    }
+
+    for (unsigned i = 0; i < input[cur_row].size(); ++i)
+    {
+        cur.push_back(input[cur_row][i]);
+        GenAll(output, input, cur, cur_row + 1);
+        cur.pop_back();
+    }
+}
+
 Charm RiseDataEditor::RenderDropDown(const int id, const std::vector<Charm>& charms, uint32_t& selectIndex) 
 {
     auto get_skillname = [this](uint32_t skill) 
@@ -1482,6 +1521,57 @@ Charm RiseDataEditor::RenderDropDown(const int id, const std::vector<Charm>& cha
     ImGui::PopID();
     ImGui::PopItemWidth();
     return charms[selectIndex];
+}
+
+std::vector<Charm> RiseDataEditor::GetCharms()
+{
+    auto GetCharm = [](const API::ManagedObject* entry) -> Charm
+    {
+        Charm c{};
+
+        const auto slotlist = *entry->get_field<API::ManagedObject*>("_TalismanDecoSlotNumList");
+        uint32_t counts[3]{};
+
+        counts[0] = utility::call<uint32_t>(slotlist, "get_Item", 1);
+        counts[1] = utility::call<uint32_t>(slotlist, "get_Item", 2);
+        counts[2] = utility::call<uint32_t>(slotlist, "get_Item", 3);
+
+        slot_count_to_slots(counts, c.slots);
+
+        const auto skilllist = *entry->get_field<API::ManagedObject*>("_TalismanSkillIdList");
+
+        c.skills[0] = utility::call<uint32_t>(skilllist, "get_Item", 0);
+        c.skills[1] = utility::call<uint32_t>(skilllist, "get_Item", 1);
+
+        const auto levellist = *entry->get_field<API::ManagedObject*>("_TalismanSkillLvList");
+
+        c.skill_levels[0] = utility::call<uint32_t>(levellist, "get_Item", 0);
+        c.skill_levels[1] = utility::call<uint32_t>(levellist, "get_Item", 1);
+
+        c.rarity = *entry->get_field<Rarity>("_IdVal");
+
+        c.IsLocked = *entry->get_field<bool>("_IsLock");
+
+        return c;
+    };
+
+    const auto count = utility::call<uint32_t>(m_inv_list, "get_Count");
+    std::vector<Charm> charms;
+
+    for (auto i = 0u; i < count; i++)
+    {
+        const auto entry = utility::call<API::ManagedObject*>(m_inv_list, "get_Item", i);
+        const auto type = entry->get_field<EquipmentType>("_IdType");
+
+        if (*type == EquipmentType::Talisman)
+        {
+            auto& c = charms.emplace_back(GetCharm(entry));
+            c.box_slot = i;
+            c.type = *type;
+        }
+    }
+
+    return charms;
 }
 
 int RiseDataEditor::GetParent(const int* set, int child) const
@@ -1603,11 +1693,11 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
     {
         return -1;
     }
-    if ((isSkillEqual || isSkillBigger) && soltBiggerCount > 0 && soltSmallerCount == 0)
+    if ((isSkillEqual || isSkillBigger) && soltBiggerCount >= 0 && soltSmallerCount == 0)
     {
         return -1;
     }
-    if ((isSkillEqual || isSkillSmaller) && soltSmallerCount > 0 && soltBiggerCount == 0)
+    if ((isSkillEqual || isSkillSmaller) && soltSmallerCount >= 0 && soltBiggerCount == 0)
     {
         return 1;
     }

@@ -106,11 +106,11 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
     {
         return -1;
     }
-    if ((isSkillEqual || isSkillBigger) && soltBiggerCount > 0 && soltSmallerCount == 0)
+    if ((isSkillEqual || isSkillBigger) && soltBiggerCount >= 0 && soltSmallerCount == 0)
     {
         return -1;
     }
-    if ((isSkillEqual || isSkillSmaller) && soltSmallerCount > 0 && soltBiggerCount == 0)
+    if ((isSkillEqual || isSkillSmaller) && soltSmallerCount >= 0 && soltBiggerCount == 0)
     {
         return 1;
     }
@@ -160,9 +160,10 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
         return 0;
     }
 
-    auto isC1Bigger = isSkillSmaller && MatchSkill(c1SoltPair, skillPair, -1);
-    auto isC2Bigger = isSkillBigger && MatchSkill(c1SoltPair, skillPair, 1);
+    auto isC1Bigger = MatchSkill(c1SoltPair, skillPair, -1);
+    auto isC2Bigger = MatchSkill(c2SoltPair, skillPair, 1);
 
+    //std::cout << "isC1Bigger : " << (isC1Bigger ? "true" : "false") << ", " << "isC2Bigger : " << (isC2Bigger ? "true" : "false") << "\n";
     if (isC1Bigger && !isC2Bigger)
     {
         return -1;
@@ -170,6 +171,18 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
     else if (!isC1Bigger && isC2Bigger)
     {
         return 1;
+    }
+    if (!isC1Bigger && !isC2Bigger)
+    {
+        return 0;
+    }
+    if (isSkillBigger)
+    {
+        return 1;
+    }
+    else if (isSkillSmaller)
+    {
+        return -1;
     }
 
     return 0;
@@ -180,7 +193,6 @@ bool Comparer::Comparer::MatchSkill(std::unordered_map<int, int> slots, std::uno
     auto isCanSolve = true;
     std::vector<std::vector<std::vector<std::tuple<int, int>>>> tempDecoSet{};
 
-    auto setPairCount = 0;
     for (auto skill : skillPair)
     {
         auto skillId = skill.first;
@@ -202,32 +214,33 @@ bool Comparer::Comparer::MatchSkill(std::unordered_map<int, int> slots, std::uno
         auto build = Build(candidates, skillLv);
 
         tempDecoSet.push_back(build);
-        if (setPairCount == 0)
-        {
-            setPairCount = 1;
-        }
-        setPairCount *= build.size();
     }
 
     if (!isCanSolve)
     {
         return false;
     }
-    for (auto i = 0; i < setPairCount; ++i)
+
+    std::vector<std::vector<std::vector<std::tuple<int, int>>>> output;
+    std::vector<std::vector<std::tuple<int, int>>> temp;
+    std::vector<std::vector<int>> v;
+    GenAll(output, tempDecoSet, temp);
+    for (auto pair : output)
     {
         auto canSolve = true;
         auto tempSoltPair = slots;
-        for (auto set : tempDecoSet)
+        for (auto set : pair)
         {
-            for (auto temp : set[i % set.size()])
+            for (auto temp : set)
             {
-                auto needCount = get<1>(temp);
-                auto decoSize = get<0>(temp);
+                auto needCount = std::get<1>(temp);
+                auto decoSize = std::get<0>(temp);
                 for (auto startSize = decoSize; startSize > 0; --startSize)
                 {
-                    if (tempSoltPair[startSize] < needCount)
+                    if (!tempSoltPair.contains(startSize) || tempSoltPair[startSize] < needCount)
                     {
                         canSolve = false;
+                        isCanSolve = false;
                         break;
                     }
                     tempSoltPair[startSize] -= needCount;
@@ -237,13 +250,17 @@ bool Comparer::Comparer::MatchSkill(std::unordered_map<int, int> slots, std::uno
                     break;
                 }
             }
-            if (canSolve)
+            if (!canSolve)
             {
-                return true;
+                break;
             }
         }
+        if (canSolve)
+        {
+            return true;
+        }
     }
-    return isCanSolve;
+    return false;
 }
 
 std::vector<std::vector<std::tuple<int, int>>> Comparer::Comparer::Build(std::map<int, int, std::greater<int>> candidates, int target)
@@ -277,9 +294,27 @@ void Comparer::Comparer::CombinationSum(std::vector<std::vector<std::tuple<int, 
             continue;
         }
         auto size = candidates.at(level);
-        std::tuple<int, int> temp(size, target / level );
+        std::tuple<int, int> temp(size, target / level);
         combination.push(temp);
         CombinationSum(res, candidates, combination, target % level);
         combination.pop();
+    }
+}
+
+void Comparer::Comparer::GenAll(std::vector<std::vector<std::vector<std::tuple<int, int>>>>& output, std::vector<std::vector<std::vector<std::tuple<int, int>>>> const& input, std::vector<std::vector<std::tuple<int, int>>>& cur, unsigned cur_row)
+{
+    if (cur_row >= input.size())
+    {
+        // This is where you have found a new permutation.
+        // Do whatever you want with it.
+        output.push_back(cur);
+        return;
+    }
+
+    for (unsigned i = 0; i < input[cur_row].size(); ++i)
+    {
+        cur.push_back(input[cur_row][i]);
+        GenAll(output, input, cur, cur_row + 1);
+        cur.pop_back();
     }
 }
