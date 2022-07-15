@@ -16,11 +16,14 @@
 #include <fmt/format.h>
 #include <nlohmann/json.hpp>
 
+#include <iostream>
 #include <fstream>
 #include <regex>
 #include <vector>
 #include <thread>
 #include <future>
+#include <map>
+#include <stack>
 
 using namespace reframework;
 
@@ -891,9 +894,7 @@ void RiseDataEditor::render_ui_loadout_editor() const {
         }
     }
 }
-bool work(int x) 
-{
-}
+
 void RiseDataEditor::RenderUICharmFilter() 
 {
     auto GetCharm = [](const API::ManagedObject* entry) -> Charm 
@@ -1005,7 +1006,7 @@ void RiseDataEditor::BuildDecoMap()
         API::get()->log_info("[RiseDataEditor.BuildDecoMap] Skill id : %d", d.SkillId);
         if (!_decoMap.contains(d.SkillId)) 
         {
-            _decoMap.insert(std::pair<int, std::unordered_map<int, int>>(d.SkillId, std::unordered_map<int, int>{}));
+            _decoMap.insert(std::pair<int, std::map<int, int, std::greater<int>>>(d.SkillId, std::map<int, int, std::greater<int>>{}));
         }
         API::get()->log_info("[RiseDataEditor.BuildDecoMap] Skill level : %d", d.SkillLevel);
         if (_decoMap[d.SkillId].contains(d.SkillLevel)) 
@@ -1335,6 +1336,115 @@ void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock
     API::get()->log_info("[RiseDataEditor.FiltCharm] end");
 }
 
+bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unordered_map<int, int> skillPair, int skillCountHelper)
+{
+    auto isCanSolve = true;
+    std::vector<std::vector<std::vector<std::tuple<int, int>>>> tempDecoSet{};
+
+    auto setPairCount = 0;
+    for (auto skill : skillPair)
+    {
+        auto skillId = skill.first;
+        if (skillId == 0)
+        {
+            continue;
+        }
+        if (!_decoMap.contains(skillId))
+        {
+            isCanSolve = false;
+            break;
+        }
+        auto skillLv = skill.second * skillCountHelper;
+        if (skillLv <= 0)
+        {
+            continue;
+        }
+        auto candidates = _decoMap.at(skillId);
+        auto build = Build(candidates, skillLv);
+
+        tempDecoSet.push_back(build);
+        if (setPairCount == 0)
+        {
+            setPairCount = 1;
+        }
+        setPairCount *= build.size();
+    }
+
+    if (!isCanSolve)
+    {
+        return false;
+    }
+    for (auto i = 0; i < setPairCount; ++i)
+    {
+        auto canSolve = true;
+        auto tempSoltPair = slots;
+        for (auto set : tempDecoSet)
+        {
+            for (auto temp : set[i % set.size()])
+            {
+                auto needCount = std::get<1>(temp);
+                auto decoSize = std::get<0>(temp);
+                for (auto startSize = decoSize; startSize > 0; --startSize)
+                {
+                    if (tempSoltPair[startSize] < needCount)
+                    {
+                        canSolve = false;
+                        break;
+                    }
+                    tempSoltPair[startSize] -= needCount;
+                }
+                if (!canSolve)
+                {
+                    break;
+                }
+            }
+            if (canSolve)
+            {
+                return true;
+            }
+        }
+    }
+    return isCanSolve;
+}
+
+std::vector<std::vector<std::tuple<int, int>>> RiseDataEditor::Build(std::map<int, int, std::greater<int>> candidates, int target)
+{
+    std::vector<std::vector<std::tuple<int, int>>> res{};
+    std::stack<std::tuple<int, int>> combination{};
+    CombinationSum(res, candidates, combination, target);
+    return res;
+}
+
+void RiseDataEditor::CombinationSum(std::vector<std::vector<std::tuple<int, int>>>& res, std::map<int, int, std::greater<int>> candidates, std::stack<std::tuple<int, int>>& combination, int target)
+{
+    if (target == 0)
+    {
+        std::vector<std::tuple<int, int>> temp{};
+        std::stack<std::tuple<int, int>> copy(combination);
+        while (!copy.empty())
+        {
+            auto p = copy.top();
+            temp.push_back(p);
+            copy.pop();
+        }
+        res.push_back(temp);
+        return;
+    }
+
+    for (auto level = target; level > 0; --level)
+    {
+        if (!candidates.contains(level))
+        {
+            continue;
+        }
+        auto size = candidates.at(level);
+        std::tuple<int, int> temp(size, target / level);
+        combination.push(temp);
+        CombinationSum(res, candidates, combination, target % level);
+        combination.pop();
+    }
+}
+
 Charm RiseDataEditor::RenderDropDown(const int id, const std::vector<Charm>& charms, uint32_t& selectIndex) 
 {
     auto get_skillname = [this](uint32_t skill) 
@@ -1396,31 +1506,22 @@ void RiseDataEditor::Combine(int*& set, int parent, int child) const
     set[child] = parentsParent;
 }
 
-int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const 
+int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) 
 {
-    auto lockCharm = [](int remainLv, int curLv) 
-    { 
-        if (remainLv == 0) 
-        {
-            return true;
-        }
-        return true;
-    };
-
     std::unordered_map<int, int> skillPair{};
-    for (auto i = 0; i < 2; ++i) 
+    for (auto i = 0; i < 2; ++i)
     {
-        if (c1.skills[i] != 0) 
+        if (c1.skills[i] != 0)
         {
-            if (!skillPair.count(c1.skills[i])) 
+            if (!skillPair.count(c1.skills[i]))
             {
                 skillPair[c1.skills[i]] = 0;
             }
             skillPair[c1.skills[i]] += c1.skill_levels[i];
         }
-        if (c2.skills[i] != 0) 
+        if (c2.skills[i] != 0)
         {
-            if (!skillPair.count(c2.skills[i])) 
+            if (!skillPair.count(c2.skills[i]))
             {
                 skillPair[c2.skills[i]] = 0;
             }
@@ -1431,240 +1532,142 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) const
     auto isSkillEqual = true;
     auto isSkillBigger = true;
     auto isSkillSmaller = true;
-    for (auto p : skillPair) 
+    for (auto p : skillPair)
     {
         isSkillEqual &= (p.second == 0);
         isSkillBigger &= (p.second > 0);
         isSkillSmaller &= (p.second < 0);
     }
-    API::get()->log_info(
-        fmt::format("[RiseDataEditor.CompareCharm] isSkillEqual : {}, isSkillBigger : {}, isSkillSmaller : {}", isSkillEqual, isSkillBigger, isSkillSmaller).c_str());
 
     std::unordered_map<int, int> soltPair{};
-    for (auto i = 0; i < 3; ++i) 
+    for (auto i = 0; i < 3; ++i)
     {
-        if (c1.slots[i] != 0) 
+        if (c1.slots[i] != 0)
         {
-            if (!soltPair.count(c1.slots[i])) 
+            if (!soltPair.count(c1.slots[i]))
             {
                 soltPair[c1.slots[i]] = 0;
             }
             soltPair[c1.slots[i]] += 1;
 
-            API::get()->log_info(fmt::format("[RiseDataEditor.CompareCharm] c1, size : {}", c1.slots[i]).c_str());
-
         }
-        if (c2.slots[i] != 0) 
+        if (c2.slots[i] != 0)
         {
-            if (!soltPair.count(c2.slots[i])) 
+            if (!soltPair.count(c2.slots[i]))
             {
                 soltPair[c2.slots[i]] = 0;
             }
             soltPair[c2.slots[i]] -= 1;
-            API::get()->log_info(fmt::format("[RiseDataEditor.CompareCharm] c2, size : {}", c2.slots[i]).c_str());
+        }
+    }
+    std::unordered_map<int, int> c1SoltPair{};
+    std::unordered_map<int, int> c2SoltPair{};
+    for (auto pair : soltPair)
+    {
+        if (pair.second > 0)
+        {
+            for (auto i = 1; i <= pair.first; ++i)
+            {
+                if (!c1SoltPair.contains(i))
+                {
+                    c1SoltPair[i] = 0;
+                }
+                c1SoltPair[i] += pair.second;
+            }
+        }
+        if (pair.second < 0)
+        {
+            for (auto i = 1; i <= pair.first; ++i)
+            {
+                if (!c2SoltPair.contains(i))
+                {
+                    c2SoltPair[i] = 0;
+                }
+                c2SoltPair[i] -= pair.second;
+            }
         }
     }
 
     auto isSoltEqual = true;
     auto soltBiggerCount = 0;
     auto soltSmallerCount = 0;
-    for (auto p : soltPair) 
+    for (auto p : soltPair)
     {
-        isSoltEqual &= (p.second == 0);
-        soltBiggerCount += p.second > 0 ? p.second : 0;
-        soltSmallerCount -= p.second < 0 ? p.second : 0;
-    }
-    API::get()->log_info(
-        fmt::format("[RiseDataEditor.CompareCharm] isSoltEqual : {}, soltBiggerCount : {}, soltSmallerCount : {}", isSoltEqual, soltBiggerCount, soltSmallerCount)
-            .c_str());
+        auto count = std::abs(p.second);
 
+        isSoltEqual &= (p.second == 0);
+        soltBiggerCount += (p.second > 0 ? count : 0);
+        soltSmallerCount += (p.second < 0 ? count : 0);
+    }
     if (isSkillEqual && isSoltEqual)
     {
-        API::get()->log_info("[RiseDataEditor.CompareCharm] 0 -1");
         return -1;
     }
-    if ((isSkillEqual || isSkillBigger) && soltBiggerCount > 0 && soltSmallerCount == 0) 
+    if ((isSkillEqual || isSkillBigger) && soltBiggerCount > 0 && soltSmallerCount == 0)
     {
-        API::get()->log_info("[RiseDataEditor.CompareCharm] 1 -1");
         return -1;
     }
-    if ((isSkillEqual || isSkillSmaller) && soltSmallerCount > 0 && soltBiggerCount == 0) 
+    if ((isSkillEqual || isSkillSmaller) && soltSmallerCount > 0 && soltBiggerCount == 0)
     {
-        API::get()->log_info("[RiseDataEditor.CompareCharm] 2 1");
         return 1;
     }
     //Skill equal
     // slot 4 vs slot 3
-    if (isSkillEqual && soltSmallerCount == soltBiggerCount) 
+    if (isSkillEqual && soltSmallerCount == soltBiggerCount)
     {
-        for (auto size = 4; size > 0; ++size) 
+        auto isC1Bigger = true;
+        auto tempC1Slot = c1SoltPair;
+        for (auto c2Slot : c2SoltPair)
         {
-            API::get()->log_info("[RiseDataEditor.CompareCharm] 3 %d", soltPair[size]);
-            return soltPair[size] > 0 ? -1 : 1;
-        }
-    }
-    if (isSkillEqual && !isSoltEqual) 
-    {
-        API::get()->log_info("[RiseDataEditor.CompareCharm] 4 0");
-        return 0;
-    }
-
-    // check c1 > c2
-    auto isC1Bigger = true;
-    {
-        std::vector<std::vector<std::map<int, int, std::greater<int>>>> tempDecoSet{};
-        auto setPairCount = 1;
-        for (auto skill : skillPair) 
-        {
-            if (skill.second >= 0) 
-            {
-                continue;
-            }
-            auto skillId = skill.first;
-            if (!_decoMap.contains(skillId)) 
+            if (!tempC1Slot.contains(c2Slot.first) || tempC1Slot[c2Slot.first] < c2Slot.second)
             {
                 isC1Bigger = false;
                 break;
             }
-            std::vector<std::map<int, int, std::greater<int>>> tempVector{};
-
-            auto skillLv = skill.second * -1;
-
-            for (auto i = skillLv; i >= 1; --i) 
-            {
-                std::map<int, int, std::greater<int>> skilledSlotPair{};
-                auto skillSize = _decoMap.at(skillId);
-                if (!skillSize.contains(i)) 
-                {
-                    continue;
-                }
-
-                skilledSlotPair.insert(std::pair<int, int>(i, skillLv / i));
-                auto remain = skillLv % i;
-                if (remain > 0 && !skillSize.contains(remain)) 
-                {
-                    break;
-                }
-                skilledSlotPair.insert(std::pair<int,int>(i, remain));
-                tempVector.push_back(skilledSlotPair);
-            }
-            setPairCount *= tempVector.size();
-            tempDecoSet.push_back(tempVector);
+            tempC1Slot[c2Slot.first] -= c2Slot.second;
         }
-        for (auto i = 0; i < setPairCount; ++i) 
+        auto isC2Bigger = true;
+        auto tempC2Slot = c2SoltPair;
+        for (auto c1Slot : c1SoltPair)
         {
-            auto canSolve = true;
-            auto tempSoltPair = soltPair;
-            for (auto set : tempDecoSet) 
+            if (!tempC2Slot.contains(c1Slot.first) || tempC2Slot[c1Slot.first] < c1Slot.second)
             {
-                for (auto temp : set[i % set.size()]) 
-                {
-                    if (tempSoltPair.contains(temp.first) && tempSoltPair[temp.first] >= temp.second) 
-                    {
-                        tempSoltPair[temp.first] -= temp.second;
-                    } 
-                    else 
-                    {
-                        canSolve = false;
-                        break;
-                    }
-                }
-                if (!canSolve) 
-                {
-                    break;
-                }
-            }
-            if (canSolve) 
-            {
-                isC1Bigger = true;
+                isC2Bigger = false;
                 break;
             }
+            tempC2Slot[c1Slot.first] -= c1Slot.second;
         }
 
-        // check c2 > c1
-        auto isC2Bigger = false;
+        if (isC2Bigger && isC1Bigger)
         {
-            std::vector<std::vector<std::map<int, int, std::greater<int>>>> tempDecoSet{};
-            auto setPairCount = 1;
-            for (auto skill : skillPair) 
-            {
-                if (skill.second <= 0) 
-                {
-                    continue;
-                }
-                auto skillId = skill.first;
-                if (!_decoMap.contains(skillId)) 
-                {
-                    isC2Bigger = false;
-                    break;
-                }
-                std::vector<std::map<int, int, std::greater<int>>> tempVector{};
-
-                auto skillLv = skill.second;
-
-                for (auto i = skillLv; i >= 1; --i) 
-                {
-                    std::map<int, int, std::greater<int>> skilledSlotPair{};
-                    auto skillSize = _decoMap.at(skillId);
-                    if (!skillSize.contains(i)) 
-                    {
-                        continue;
-                    }
-
-                    skilledSlotPair.insert(std::pair<int, int>(i, skillLv / i));
-                    auto remain = skillLv % i;
-                    if (remain > 0 && skillSize.contains(remain)) 
-                    {
-                        skilledSlotPair.insert(std::pair<int, int>(i, remain));
-                        break;
-                    }
-                    tempVector.push_back(skilledSlotPair);
-                }
-                setPairCount *= tempVector.size();
-                tempDecoSet.push_back(tempVector);
-            }
-            for (auto i = 0; i < setPairCount; ++i) 
-            {
-                auto canSolve = true;
-                auto tempSoltPair = soltPair;
-                for (auto set : tempDecoSet) 
-                {
-                    for (auto temp : set[i % set.size()]) 
-                    {
-                        if (tempSoltPair.contains(temp.first) && tempSoltPair[temp.first] <= temp.second * -1) 
-                        {
-                            tempSoltPair[temp.first] += temp.second;
-                        } 
-                        else 
-                        {
-                            canSolve = false;
-                            break;
-                        }
-                    }
-                    if (!canSolve) 
-                    {
-                        break;
-                    }
-                }
-                if (canSolve) 
-                {
-                    isC2Bigger = true;
-                    break;
-                }
-            }
+            return 0;
         }
-        if (isC1Bigger && !isC2Bigger) 
+        if (isC1Bigger)
         {
-            API::get()->log_info("[RiseDataEditor.CompareCharm] 5 -1");
             return -1;
         }
-        else if (!isC1Bigger && isC2Bigger) 
+        if (isC2Bigger)
         {
-            API::get()->log_info("[RiseDataEditor.CompareCharm] 6 -1");
             return 1;
         }
+        return 0;
     }
-    API::get()->log_info("[RiseDataEditor.CompareCharm] 7 -1");
+    if (isSkillEqual && !isSoltEqual)
+    {
+        return 0;
+    }
+
+    auto isC1Bigger = isSkillSmaller && MatchSkill(c1SoltPair, skillPair, -1);
+    auto isC2Bigger = isSkillBigger && MatchSkill(c1SoltPair, skillPair, 1);
+
+    if (isC1Bigger && !isC2Bigger)
+    {
+        return -1;
+    }
+    else if (!isC1Bigger && isC2Bigger)
+    {
+        return 1;
+    }
 
     return 0;
 }
