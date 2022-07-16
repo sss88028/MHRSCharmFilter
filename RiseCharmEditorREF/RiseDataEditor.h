@@ -8,6 +8,8 @@
 #include <string>
 #include <unordered_map>
 #include <future>
+#include <map>
+#include <stack>
 
 enum class EquipmentType : int32_t {
     Empty,
@@ -97,6 +99,7 @@ private:
     void render_ui_item_editor();
     void render_ui_loadout_editor() const;
     void RenderUICharmFilter();
+    void RenderUICharmFilterDebug();
     void BuildDecoMap();
     reframework::API::ManagedObject* GetDecoList(uint32_t& count);
     Deco GetDecoData(reframework::API::ManagedObject* entry);
@@ -111,10 +114,16 @@ private:
     std::vector<Charm> import_charms(const std::string& from);
     void import_items(const std::string& from, reframework::API::ManagedObject* itembox) const;
     
+    std::vector<Charm> GetCharms();
     int GetParent(const int* set, int child) const;
     void Combine(int*& set, int parent, int child) const;
-    int CompareCharm(const Charm& c1, const Charm& c2) const;
+    int CompareCharm(const Charm& c1, const Charm& c2);
     void FiltCharm(std::vector<Charm>& charms, const bool isKeepLock);
+    bool MatchSkill(std::unordered_map<int, int> slots, std::unordered_map<int, int> skillPair, int skillCountHelper);
+    std::vector<std::vector<std::tuple<int, int>>> Build(std::map<int, int, std::greater<int>> candidates, int target);
+    void CombinationSum(std::vector<std::vector<std::tuple<int, int>>>& res, std::map<int, int, std::greater<int>> candidates, std::stack<std::tuple<int, int>>& combination, int target);
+    void GenAll(std::vector<std::vector<std::vector<std::tuple<int, int>>>>& output, std::vector<std::vector<std::vector<std::tuple<int, int>>>> const& input, std::vector<std::vector<std::tuple<int, int>>>& cur_perm, unsigned cur_row = 0);
+    
     Charm RenderDropDown(const int id, const std::vector<Charm>& charms, uint32_t& selectIndex);
 
     static void change_language_hook(
@@ -146,7 +155,7 @@ private:
     bool _isDecoMapBuilt = false;
     std::atomic_bool _isFilting = false;
     std::atomic_bool _isNeedSet = false;
-    std::unordered_map<int, std::unordered_map<int, int>> _decoMap{};
+    std::unordered_map<int, std::map<int, int, std::greater<int>>> _decoMap{};
     std::unordered_map<int, int> _test{};
 
     uint32_t m_max_skill_id = 0;
@@ -166,8 +175,14 @@ private:
 
     bool _isKeepLock = false;
     uint32_t _selectedCharm01 = 0;
+    uint32_t _lastSelectedCharm01 = 0;
     uint32_t _selectedCharm02 = 0;
+    uint32_t _lastSelectedCharm02 = 0;
+    uint32_t _selectedCharm03 = 0;
+    uint32_t _lastSelectedCharm03 = 0;
     int _compareResult = 0;
+    bool _hasPair = false;
+    Charm _pairCharm;
 
     ImFont* m_font_latin_cyrillic{};
     ImFont* m_font_chinese_japanese{};
