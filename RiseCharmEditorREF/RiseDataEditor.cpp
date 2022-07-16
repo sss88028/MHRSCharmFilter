@@ -910,6 +910,13 @@ void RiseDataEditor::RenderUICharmFilter()
         *entry->get_field<bool>("_IsLock") = charm.IsLocked;
     };
 
+    if (_isFilting)
+    {
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
+        ImGui::TextWrapped("Filting");
+        ImGui::PopStyleColor();
+    }
+
     std::vector<Charm> charms = GetCharms();
 
     if (charms.empty()) 
@@ -922,13 +929,7 @@ void RiseDataEditor::RenderUICharmFilter()
 
     ImGui::Checkbox(_labelRemainLock.c_str(), &_isKeepLock);
 
-    if (_isFilting) 
-    {
-        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
-        ImGui::TextWrapped("Filting");
-        ImGui::PopStyleColor();
-    }
-    else if (ImGui::Button("Filt"))
+    if (ImGui::Button("Filt"))
     {
         BuildDecoMap();
         _isFilting = true;
@@ -972,15 +973,12 @@ void RiseDataEditor::RenderUICharmFilterDebug()
     {
         _lastSelectedCharm03 = _selectedCharm03;
         _hasPair = false;
-    }
-    if (ImGui::Button("Find"))
-    {
-        for (auto c : charms) 
+        for (const auto& c : charms)
         {
-            if (c.box_slot != c3.box_slot) 
+            if (c.box_slot != c3.box_slot)
             {
-                auto res = CompareCharm(c3, c);
-                if (res == 1) 
+                auto res = CompareCharm(c, c3);
+                if (res == -1)
                 {
                     _hasPair = true;
                     _pairCharm = c;
@@ -1278,8 +1276,14 @@ void RiseDataEditor::import_items(const std::string& from, reframework::API::Man
 
 void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock)
 {
+    auto get_skillname = [this](uint32_t skill)
+    {
+        const auto str = utility::call<SystemString*>(m_get_skill_name, skill);
+        return utility::narrow(str->data);
+    };
     API::get()->log_info("[RiseDataEditor.FiltCharm] thread id : %d", std::this_thread::get_id());
     const auto l = charms.size();
+    API::get()->log_info(fmt::format("[RiseDataEditor.FiltCharm] charms count : {}", l).c_str());
     auto set = new int[l];
     memset(set, -1, l * sizeof(int));
 
@@ -1313,38 +1317,43 @@ void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock
             auto res = CompareCharm(c1, c2);
             if (res == -1) 
             {
-                Combine(set, j, i);
+                auto str = fmt::format("[RiseDataEditor.RenderUICharmFilter] {} {} > {} {}", c1.box_slot, c1.get_name(get_skillname), c2.box_slot, c2.get_name(get_skillname));
+                API::get()->log_info(str.c_str());
+                Combine(set, i, j);
             } 
             else if (res == 1) 
             {
-                Combine(set, i, j);
+                auto str = fmt::format("[RiseDataEditor.RenderUICharmFilter] {} {} < {} {}", c1.box_slot, c1.get_name(get_skillname), c2.box_slot, c2.get_name(get_skillname));
+                API::get()->log_info(str.c_str());
+                Combine(set, j, i);
                 break;
             }
         }
     }
-    for (auto i = 0; i < l; ++i) 
+    for (auto i = 0u; i < l; ++i) 
     {
         if (isKeepLock && charms[i].IsLocked)
         {
             continue;
         }
-        charms[i].IsLocked = set[i] == -1;
+        auto isLock = set[i] == -1 || set[i] == i;
+
+        API::get()->log_info(fmt::format("[RiseDataEditor.FiltCharm] i : {}, IsLock : {}", i, isLock).c_str());
+        charms[i].IsLocked = isLock;
     }
 
     delete []set;
     _isFilting = false;
 
     API::get()->log_info("[RiseDataEditor.RenderUICharmFilter] start set");
-    for (auto i = 0u; i < l; i++) 
+    for (auto charm : charms) 
     {
-        const auto entry = utility::call<API::ManagedObject*>(m_inv_list, "get_Item", i);
+        const auto entry = utility::call<API::ManagedObject*>(m_inv_list, "get_Item", charm.box_slot);
 
         const auto type = entry->get_field<EquipmentType>("_IdType");
 
-        if (*type == EquipmentType::Talisman) 
-        {
-            *entry->get_field<bool>("_IsLock") = charms[i].IsLocked;
-        }
+        auto str = fmt::format("[RiseDataEditor.RenderUICharmFilter] {} : {}, {}", charm.box_slot, charm.get_name(get_skillname), charm.IsLocked);
+        *entry->get_field<bool>("_IsLock") = charm.IsLocked;
     }
     API::get()->log_info("[RiseDataEditor.FiltCharm] end");
 }
@@ -1528,13 +1537,13 @@ std::vector<Charm> RiseDataEditor::GetCharms()
     auto GetCharm = [](const API::ManagedObject* entry) -> Charm
     {
         Charm c{};
-
         const auto slotlist = *entry->get_field<API::ManagedObject*>("_TalismanDecoSlotNumList");
-        uint32_t counts[3]{};
+        uint32_t counts[4]{};
 
         counts[0] = utility::call<uint32_t>(slotlist, "get_Item", 1);
         counts[1] = utility::call<uint32_t>(slotlist, "get_Item", 2);
         counts[2] = utility::call<uint32_t>(slotlist, "get_Item", 3);
+        counts[3] = utility::call<uint32_t>(slotlist, "get_Item", 4);
 
         slot_count_to_slots(counts, c.slots);
 
@@ -1587,13 +1596,7 @@ int RiseDataEditor::GetParent(const int* set, int child) const
 
 void RiseDataEditor::Combine(int*& set, int parent, int child) const 
 {
-    auto parentsParent = GetParent(set, parent);
-    auto childsParent = GetParent(set, child);
-    if (parentsParent >= 0 && childsParent >= 0 && parentsParent == childsParent) 
-    {
-        return;
-    }
-    set[child] = parentsParent;
+    set[child] = parent;
 }
 
 int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) 
