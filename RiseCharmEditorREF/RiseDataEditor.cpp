@@ -960,6 +960,7 @@ void RiseDataEditor::RenderUICharmFilterDebug()
     auto c2 = RenderDropDown(20, charms, _selectedCharm02);
     if (_lastSelectedCharm01 != _selectedCharm01 || _lastSelectedCharm02 != _selectedCharm02)
     {
+        BuildDecoMap();
         _compareResult = CompareCharm(c1, c2);
         _lastSelectedCharm01 = _selectedCharm01;
         _lastSelectedCharm02 = _selectedCharm02;
@@ -971,6 +972,7 @@ void RiseDataEditor::RenderUICharmFilterDebug()
     auto c3 = RenderDropDown(30, charms, _selectedCharm03);
     if (_selectedCharm03 != _lastSelectedCharm03)
     {
+        BuildDecoMap();
         _lastSelectedCharm03 = _selectedCharm03;
         _hasPair = false;
         for (const auto& c : charms)
@@ -1017,12 +1019,12 @@ void RiseDataEditor::BuildDecoMap()
         API::get()->log_info("[RiseDataEditor.BuildDecoMap] Skill id : %d", d.SkillId);
         if (!_decoMap.contains(d.SkillId)) 
         {
-            _decoMap.insert(std::pair<int, std::map<int, int, std::greater<int>>>(d.SkillId, std::map<int, int, std::greater<int>>{}));
+            _decoMap[d.SkillId] = {};
         }
         API::get()->log_info("[RiseDataEditor.BuildDecoMap] Skill level : %d", d.SkillLevel);
-        if (_decoMap[d.SkillId].contains(d.SkillLevel)) 
+        if (!_decoMap[d.SkillId].contains(d.SkillLevel))
         {
-            _decoMap[d.SkillId].insert(std::pair<int, int>(d.SkillLevel, d.Size));
+            _decoMap[d.SkillId][d.SkillLevel] = d.Size;
         }
 
         API::get()->log_info("[RiseDataEditor.BuildDecoMap] Size : %d", d.Size);
@@ -1283,7 +1285,7 @@ void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock
     };
     API::get()->log_info("[RiseDataEditor.FiltCharm] thread id : %d", std::this_thread::get_id());
     const auto l = charms.size();
-    API::get()->log_info(fmt::format("[RiseDataEditor.FiltCharm] charms count : {}", l).c_str());
+    //API::get()->log_info(fmt::format("[RiseDataEditor.FiltCharm] charms count : {}", l).c_str());
     auto set = new int[l];
     memset(set, -1, l * sizeof(int));
 
@@ -1317,14 +1319,14 @@ void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock
             auto res = CompareCharm(c1, c2);
             if (res == -1) 
             {
-                auto str = fmt::format("[RiseDataEditor.RenderUICharmFilter] {} {} > {} {}", c1.box_slot, c1.get_name(get_skillname), c2.box_slot, c2.get_name(get_skillname));
-                API::get()->log_info(str.c_str());
+                //auto str = fmt::format("[RiseDataEditor.FiltCharm] {} {} > {} {}", c1.box_slot, c1.get_name(get_skillname), c2.box_slot, c2.get_name(get_skillname));
+                //API::get()->log_info(str.c_str());
                 Combine(set, i, j);
             } 
             else if (res == 1) 
             {
-                auto str = fmt::format("[RiseDataEditor.RenderUICharmFilter] {} {} < {} {}", c1.box_slot, c1.get_name(get_skillname), c2.box_slot, c2.get_name(get_skillname));
-                API::get()->log_info(str.c_str());
+                //auto str = fmt::format("[RiseDataEditor.FiltCharm] {} {} < {} {}", c1.box_slot, c1.get_name(get_skillname), c2.box_slot, c2.get_name(get_skillname));
+                //API::get()->log_info(str.c_str());
                 Combine(set, j, i);
                 break;
             }
@@ -1338,21 +1340,20 @@ void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock
         }
         auto isLock = set[i] == -1 || set[i] == i;
 
-        API::get()->log_info(fmt::format("[RiseDataEditor.FiltCharm] i : {}, IsLock : {}", i, isLock).c_str());
+        //API::get()->log_info(fmt::format("[RiseDataEditor.FiltCharm] i : {}, IsLock : {}", i, isLock).c_str());
         charms[i].IsLocked = isLock;
     }
 
     delete []set;
     _isFilting = false;
 
-    API::get()->log_info("[RiseDataEditor.RenderUICharmFilter] start set");
+    API::get()->log_info("[RiseDataEditor.FiltCharm] start set");
     for (auto charm : charms) 
     {
         const auto entry = utility::call<API::ManagedObject*>(m_inv_list, "get_Item", charm.box_slot);
 
         const auto type = entry->get_field<EquipmentType>("_IdType");
 
-        auto str = fmt::format("[RiseDataEditor.RenderUICharmFilter] {} : {}, {}", charm.box_slot, charm.get_name(get_skillname), charm.IsLocked);
         *entry->get_field<bool>("_IsLock") = charm.IsLocked;
     }
     API::get()->log_info("[RiseDataEditor.FiltCharm] end");
@@ -1370,22 +1371,44 @@ bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unorder
         {
             continue;
         }
-        if (!_decoMap.contains(skillId))
+        auto hasSkill = _decoMap.contains(skillId);
+        auto skillLv = skill.second * skillCountHelper;
+        //auto str = fmt::format("[RiseDataEditor.MatchSkill] hasSkill : {}, skillId : {}, skillLv : {}", hasSkill, skillId, skillLv);
+        //API::get()->log_info(str.c_str());
+        if (!hasSkill)
         {
             isCanSolve = false;
             break;
         }
-        auto skillLv = skill.second * skillCountHelper;
         if (skillLv <= 0)
         {
             continue;
         }
-        auto candidates = _decoMap.at(skillId);
+        auto candidates = _decoMap[skillId];
         auto build = Build(candidates, skillLv);
 
+        /*for (auto map : build) 
+        {
+            for (auto pair : map)
+            {
+                auto pairStr = fmt::format("[RiseDataEditor.MatchSkill] {}, {}", pair.first, pair.second);
+                API::get()->log_info(pairStr.c_str());
+            }
+        }*/
         tempDecoSet.push_back(build);
     }
 
+    //for (auto set : tempDecoSet)
+    //{
+    //    for (auto map : set)
+    //    {
+    //        for (auto pair : map)
+    //        {
+    //            auto str = fmt::format("[RiseDataEditor.MatchSkill] {} , {}", pair.first, pair.second);
+    //            API::get()->log_info(str.c_str());
+    //        }
+    //    }
+    //}
     if (!isCanSolve)
     {
         return false;
@@ -1410,7 +1433,6 @@ bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unorder
                     if (!tempSoltPair.contains(startSize) || tempSoltPair[startSize] < needCount)
                     {
                         canSolve = false;
-                        isCanSolve = false;
                         break;
                     }
                     tempSoltPair[startSize] -= needCount;
@@ -1418,6 +1440,13 @@ bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unorder
                 if (!canSolve)
                 {
                     break;
+                }
+            }
+            for (auto slotPair : tempSoltPair)
+            {
+                if (slotPair.second < 0)
+                {
+                    canSolve = false;
                 }
             }
             if (!canSolve)
@@ -1435,15 +1464,35 @@ bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unorder
 
 std::vector<std::unordered_map<int, int>> RiseDataEditor::Build(std::map<int, int, std::greater<int>> candidates, int target)
 {
+    //auto buildStr = fmt::format("[RiseDataEditor.Build] candidates size : {}", candidates.size());
+    //API::get()->log_info(buildStr.c_str());
+
     std::vector<std::unordered_map<int, int>> res{};
     std::stack<int> combination{};
+
+    //for (auto pair : candidates)
+    //{
+    //    auto str = fmt::format("[RiseDataEditor.Build] candidates : {} , {}", pair.first, pair.second);
+    //    API::get()->log_info(str.c_str());
+    //}
     CombinationSum(res, candidates, combination, target, target);
+
+    //for (auto map : res)
+    //{
+    //    for (auto pair : map)
+    //    {
+    //        auto str = fmt::format("[RiseDataEditor.Build] {} , {}", pair.first, pair.second);
+    //        API::get()->log_info(str.c_str());
+    //    }
+    //}
     return res;
 }
 
 void RiseDataEditor::CombinationSum(std::vector<std::unordered_map<int, int>>& res, std::map<int, int, std::greater<int>> candidates, std::stack<int>& combination, int startLevel, int target)
 {
-    if (target <= 0)
+    //auto buildStr = fmt::format("[RiseDataEditor.CombinationSum] startLevel : {}, target : {}", startLevel, target);
+    //API::get()->log_info(buildStr.c_str());
+    if (target == 0)
     {
         std::unordered_map<int, int> temp{};
         std::stack<int> copy(combination);
@@ -1458,16 +1507,25 @@ void RiseDataEditor::CombinationSum(std::vector<std::unordered_map<int, int>>& r
             copy.pop();
         }
         res.push_back(temp);
+        //for (auto pair : temp) 
+        //{
+        //    auto str = fmt::format("[RiseDataEditor.CombinationSum] res push : {}, {}", pair.first, pair.second);
+        //    API::get()->log_info(str.c_str());
+        //}
+        return;
+    }
+    else if (target < 0)
+    {
         return;
     }
 
-    for (auto level = startLevel; level > 0; --level)
+    for (auto level = startLevel; level > 0 && level <= target; --level)
     {
         if (!candidates.contains(level))
         {
             continue;
         }
-        auto size = candidates.at(level);
+        auto size = candidates[level];
 
         combination.push(size);
         auto nextStartLevel = (level > target - level) ? target - level : level;
@@ -1600,6 +1658,11 @@ void RiseDataEditor::Combine(int*& set, int parent, int child) const
 
 int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2) 
 {
+    auto get_skillname = [this](uint32_t skill) 
+    {
+        const auto str = utility::call<SystemString*>(m_get_skill_name, skill);
+        return utility::narrow(str->data);
+    };
     std::unordered_map<int, int> skillPair{};
     for (auto i = 0; i < 2; ++i)
     {
@@ -1622,13 +1685,19 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
     }
 
     auto isSkillEqual = true;
-    auto isSkillBigger = true;
-    auto isSkillSmaller = true;
+    auto isAllSkillBigger = true;
+    auto isAllSkillSmaller = true;
+
+    auto skillBiggerCount = 0;
+    auto skillSmallerCount = 0;
     for (auto p : skillPair)
     {
         isSkillEqual &= (p.second == 0);
-        isSkillBigger &= (p.second > 0);
-        isSkillSmaller &= (p.second < 0);
+        isAllSkillBigger &= (p.second > 0);
+        isAllSkillSmaller &= (p.second < 0);
+
+        skillBiggerCount += (p.second > 0 ? p.second : 0);
+        skillSmallerCount -= (p.second < 0 ? p.second : 0);
     }
 
     std::unordered_map<int, int> soltPair{};
@@ -1665,6 +1734,11 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
                     c1SoltPair[i] = 0;
                 }
                 c1SoltPair[i] += pair.second;
+                if (!c2SoltPair.contains(i))
+                {
+                    c2SoltPair[i] = 0;
+                }
+                c2SoltPair[i] -= pair.second;
             }
         }
         if (pair.second < 0)
@@ -1676,6 +1750,12 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
                     c2SoltPair[i] = 0;
                 }
                 c2SoltPair[i] -= pair.second;
+
+                if (!c1SoltPair.contains(i))
+                {
+                    c1SoltPair[i] = 0;
+                }
+                c1SoltPair[i] += pair.second;
             }
         }
     }
@@ -1695,11 +1775,11 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
     {
         return -1;
     }
-    if ((isSkillEqual || isSkillBigger) && soltBiggerCount >= 0 && soltSmallerCount == 0)
+    if ((isSkillEqual || isAllSkillBigger) && soltBiggerCount >= 0 && soltSmallerCount == 0)
     {
         return -1;
     }
-    if ((isSkillEqual || isSkillSmaller) && soltSmallerCount >= 0 && soltBiggerCount == 0)
+    if ((isSkillEqual || isAllSkillSmaller) && soltSmallerCount >= 0 && soltBiggerCount == 0)
     {
         return 1;
     }
@@ -1708,26 +1788,22 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
     if (isSkillEqual && soltSmallerCount == soltBiggerCount)
     {
         auto isC1Bigger = true;
-        auto tempC1Slot = c1SoltPair;
         for (auto c2Slot : c2SoltPair)
         {
-            if (!tempC1Slot.contains(c2Slot.first) || tempC1Slot[c2Slot.first] < c2Slot.second)
+            if (!c1SoltPair.contains(c2Slot.first) || c1SoltPair[c2Slot.first] < 0)
             {
                 isC1Bigger = false;
                 break;
             }
-            tempC1Slot[c2Slot.first] -= c2Slot.second;
         }
         auto isC2Bigger = true;
-        auto tempC2Slot = c2SoltPair;
         for (auto c1Slot : c1SoltPair)
         {
-            if (!tempC2Slot.contains(c1Slot.first) || tempC2Slot[c1Slot.first] < c1Slot.second)
+            if (!c2SoltPair.contains(c1Slot.first) || c2SoltPair[c1Slot.first] < 0)
             {
                 isC2Bigger = false;
                 break;
             }
-            tempC2Slot[c1Slot.first] -= c1Slot.second;
         }
 
         if (isC2Bigger && isC1Bigger)
@@ -1749,16 +1825,42 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
         return 0;
     }
 
-    auto isC1Bigger = isSkillSmaller && MatchSkill(c1SoltPair, skillPair, -1);
-    auto isC2Bigger = isSkillBigger && MatchSkill(c1SoltPair, skillPair, 1);
+    //auto checkStr = fmt::format("[RiseDataEditor.CompareCharm] check {} > {}", c1.get_name(get_skillname), c2.get_name(get_skillname));
+    //API::get()->log_info(checkStr.c_str());
+    auto isC1Bigger = MatchSkill(c1SoltPair, skillPair, -1);
+    //checkStr = fmt::format("[RiseDataEditor.CompareCharm] check {} < {}", c1.get_name(get_skillname), c2.get_name(get_skillname));
+    //API::get()->log_info(checkStr.c_str());
+    auto isC2Bigger = MatchSkill(c2SoltPair, skillPair, 1);
 
+    //auto str = fmt::format("[RiseDataEditor.CompareCharm] {} {}, {} {}, {} {}", isC1Bigger, isC2Bigger, skillSmallerCount, skillBiggerCount, isAllSkillBigger, isAllSkillSmaller);
+    //API::get()->log_info(str.c_str());
     if (isC1Bigger && !isC2Bigger)
     {
+        if (skillSmallerCount == 0)
+        {
+            return 0;
+        }
         return -1;
     }
     else if (!isC1Bigger && isC2Bigger)
     {
+        if (skillBiggerCount == 0)
+        {
+            return 0;
+        }
         return 1;
+    }
+    if (!isC1Bigger && !isC2Bigger)
+    {
+        return 0;
+    }
+    if (isAllSkillBigger)
+    {
+        return 1;
+    }
+    else if (isAllSkillSmaller)
+    {
+        return -1;
     }
 
     return 0;

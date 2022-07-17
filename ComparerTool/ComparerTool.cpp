@@ -27,6 +27,14 @@ int main()
     {
         {1, 2},
     };
+    std::map<int, int, std::greater<int>> eSkill
+    {
+        {1, 2},
+    };
+    std::map<int, int, std::greater<int>> fSkill
+    {
+        {1, 2},
+    };
 
     std::unordered_map<int, std::map<int, int, std::greater<int>>> decoMap
     {
@@ -34,6 +42,8 @@ int main()
         {2, bSkill},
         {3, cSkill},
         {4, dSkill},
+        {5, eSkill},
+        {6, fSkill},
     };
 
     c.SetDecoMap(decoMap);
@@ -149,6 +159,21 @@ int main()
         {
             .Slots = {0, 0, 0},
             .Skills = {1, 2},
+            .SkillLevels = {1, 1},
+        };
+        std::cout << "Expect -1 ," << c.Compare(c1, c2) << "\n";;
+    }
+    {
+        Comparer::Charm c1
+        {
+            .Slots = {3, 1, 1},
+            .Skills = {5, 6},
+            .SkillLevels = {2, 2},
+        };
+        Comparer::Charm c2
+        {
+            .Slots = {1, 1, 0},
+            .Skills = {5, 1},
             .SkillLevels = {1, 1},
         };
         std::cout << "Expect -1 ," << c.Compare(c1, c2) << "\n";;
