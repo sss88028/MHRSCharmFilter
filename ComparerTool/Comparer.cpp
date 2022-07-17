@@ -33,13 +33,19 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
     }
 
     auto isSkillEqual = true;
-    auto isSkillBigger = true;
-    auto isSkillSmaller = true;
+    auto isAllSkillBigger = true;
+    auto isAllSkillSmaller = true;
+
+    auto skillBiggerCount = 0;
+    auto skillSmallerCount = 0;
     for (auto p : skillPair)
     {
         isSkillEqual &= (p.second == 0);
-        isSkillBigger &= (p.second > 0);
-        isSkillSmaller &= (p.second < 0);
+        isAllSkillBigger &= (p.second > 0);
+        isAllSkillSmaller &= (p.second < 0);
+
+        skillBiggerCount += (p.second > 0 ? p.second : 0);
+        skillSmallerCount -= (p.second < 0 ? p.second : 0);
     }
 
     std::unordered_map<int, int> soltPair{};
@@ -106,11 +112,11 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
     {
         return -1;
     }
-    if ((isSkillEqual || isSkillBigger) && soltBiggerCount >= 0 && soltSmallerCount == 0)
+    if ((isSkillEqual || isAllSkillBigger) && soltBiggerCount >= 0 && soltSmallerCount == 0)
     {
         return -1;
     }
-    if ((isSkillEqual || isSkillSmaller) && soltSmallerCount >= 0 && soltBiggerCount == 0)
+    if ((isSkillEqual || isAllSkillSmaller) && soltSmallerCount >= 0 && soltBiggerCount == 0)
     {
         return 1;
     }
@@ -166,21 +172,29 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
     //std::cout << "isC1Bigger : " << (isC1Bigger ? "true" : "false") << ", " << "isC2Bigger : " << (isC2Bigger ? "true" : "false") << "\n";
     if (isC1Bigger && !isC2Bigger)
     {
+        if (skillSmallerCount == 0)
+        {
+            return 0;
+        }
         return -1;
     }
     else if (!isC1Bigger && isC2Bigger)
     {
+        if (skillBiggerCount == 0)
+        {
+            return 0;
+        }
         return 1;
     }
     if (!isC1Bigger && !isC2Bigger)
     {
         return 0;
     }
-    if (isSkillBigger)
+    if (isAllSkillBigger)
     {
         return 1;
     }
-    else if (isSkillSmaller)
+    else if (isAllSkillSmaller)
     {
         return -1;
     }
@@ -191,7 +205,7 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
 bool Comparer::Comparer::MatchSkill(std::unordered_map<int, int> slots, std::unordered_map<int, int> skillPair, int skillCountHelper)
 {
     auto isCanSolve = true;
-    std::vector<std::vector<std::vector<std::tuple<int, int>>>> tempDecoSet{};
+    std::vector<std::vector<std::unordered_map<int, int>>> tempDecoSet{};
 
     for (auto skill : skillPair)
     {
@@ -221,8 +235,8 @@ bool Comparer::Comparer::MatchSkill(std::unordered_map<int, int> slots, std::uno
         return false;
     }
 
-    std::vector<std::vector<std::vector<std::tuple<int, int>>>> output;
-    std::vector<std::vector<std::tuple<int, int>>> temp;
+    std::vector<std::vector<std::unordered_map<int, int>>> output;
+    std::vector<std::unordered_map<int, int>> temp;
     std::vector<std::vector<int>> v;
     GenAll(output, tempDecoSet, temp);
     for (auto pair : output)
@@ -263,45 +277,49 @@ bool Comparer::Comparer::MatchSkill(std::unordered_map<int, int> slots, std::uno
     return false;
 }
 
-std::vector<std::vector<std::tuple<int, int>>> Comparer::Comparer::Build(std::map<int, int, std::greater<int>> candidates, int target)
+std::vector<std::unordered_map<int, int>> Comparer::Comparer::Build(std::map<int, int, std::greater<int>> candidates, int target)
 {
-    std::vector<std::vector<std::tuple<int, int>>> res{};
-    std::stack<std::tuple<int, int>> combination{};
-    CombinationSum(res, candidates, combination, target);
+    std::vector<std::unordered_map<int, int>> res{};
+    std::stack<int> combination{};
+    CombinationSum(res, candidates, combination, target, target);
     return res;
 }
 
-void Comparer::Comparer::CombinationSum(std::vector<std::vector<std::tuple<int, int>>>& res, std::map<int, int, std::greater<int>> candidates, std::stack<std::tuple<int, int>>& combination, int target)
+void Comparer::Comparer::CombinationSum(std::vector<std::unordered_map<int, int>>& res, std::map<int, int, std::greater<int>> candidates, std::stack<int>& combination, int startLevel, int target)
 {
-    if (target == 0)
+    if (target <= 0)
     {
-        std::vector<std::tuple<int, int>> temp{};
-        std::stack<std::tuple<int, int>> copy(combination);
+        std::unordered_map<int, int> temp{};
+        std::stack<int> copy(combination);
         while (!copy.empty()) 
         {
-            auto p = copy.top();
-            temp.push_back(p);
+            auto key = copy.top();
+            if (!temp.contains(key))
+            {
+                temp[key] = 0;
+            }
+            temp[key] += 1;
             copy.pop();
         }
         res.push_back(temp);
         return;
     }
 
-    for (auto level = target; level > 0; --level)
+    for (auto level = startLevel; level > 0; --level)
     {
         if (!candidates.contains(level))
         {
             continue;
         }
         auto size = candidates.at(level);
-        std::tuple<int, int> temp(size, target / level);
-        combination.push(temp);
-        CombinationSum(res, candidates, combination, target % level);
+
+        combination.push(size);
+        CombinationSum(res, candidates, combination, std::min(level, target - level), target - level);
         combination.pop();
     }
 }
 
-void Comparer::Comparer::GenAll(std::vector<std::vector<std::vector<std::tuple<int, int>>>>& output, std::vector<std::vector<std::vector<std::tuple<int, int>>>> const& input, std::vector<std::vector<std::tuple<int, int>>>& cur, unsigned cur_row)
+void Comparer::Comparer::GenAll(std::vector<std::vector<std::unordered_map<int, int>>>& output, std::vector<std::vector<std::unordered_map<int, int>>> const& input, std::vector<std::unordered_map<int, int>>& cur, unsigned cur_row)
 {
     if (cur_row >= input.size())
     {

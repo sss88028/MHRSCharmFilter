@@ -136,8 +136,24 @@ int main()
             .Skills = {1, 2},
             .SkillLevels = {4, 5},
         };
-        std::cout << "Expect 1 ," << c.Compare(c1, c2) << "\n";;
+        std::cout << "Expect 0 ," << c.Compare(c1, c2) << "\n";;
     }
+    {
+        Comparer::Charm c1
+        {
+            .Slots = {3, 1, 1},
+            .Skills = {1, 0},
+            .SkillLevels = {3, 0},
+        };
+        Comparer::Charm c2
+        {
+            .Slots = {0, 0, 0},
+            .Skills = {1, 2},
+            .SkillLevels = {1, 1},
+        };
+        std::cout << "Expect -1 ," << c.Compare(c1, c2) << "\n";;
+    }
+
     std::cout << "Hello World!\n";
 }
 

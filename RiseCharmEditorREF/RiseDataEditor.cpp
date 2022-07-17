@@ -1361,9 +1361,8 @@ void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock
 bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unordered_map<int, int> skillPair, int skillCountHelper)
 {
     auto isCanSolve = true;
-    std::vector<std::vector<std::vector<std::tuple<int, int>>>> tempDecoSet{};
+    std::vector<std::vector<std::unordered_map<int, int>>> tempDecoSet{};
 
-    auto setPairCount = 0;
     for (auto skill : skillPair)
     {
         auto skillId = skill.first;
@@ -1385,11 +1384,6 @@ bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unorder
         auto build = Build(candidates, skillLv);
 
         tempDecoSet.push_back(build);
-        if (setPairCount == 0)
-        {
-            setPairCount = 1;
-        }
-        setPairCount *= build.size();
     }
 
     if (!isCanSolve)
@@ -1397,8 +1391,8 @@ bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unorder
         return false;
     }
 
-    std::vector<std::vector<std::vector<std::tuple<int, int>>>> output;
-    std::vector<std::vector<std::tuple<int, int>>> temp;
+    std::vector<std::vector<std::unordered_map<int, int>>> output;
+    std::vector<std::unordered_map<int, int>> temp;
     std::vector<std::vector<int>> v;
     GenAll(output, tempDecoSet, temp);
     for (auto pair : output)
@@ -1439,45 +1433,50 @@ bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unorder
     return false;
 }
 
-std::vector<std::vector<std::tuple<int, int>>> RiseDataEditor::Build(std::map<int, int, std::greater<int>> candidates, int target)
+std::vector<std::unordered_map<int, int>> RiseDataEditor::Build(std::map<int, int, std::greater<int>> candidates, int target)
 {
-    std::vector<std::vector<std::tuple<int, int>>> res{};
-    std::stack<std::tuple<int, int>> combination{};
-    CombinationSum(res, candidates, combination, target);
+    std::vector<std::unordered_map<int, int>> res{};
+    std::stack<int> combination{};
+    CombinationSum(res, candidates, combination, target, target);
     return res;
 }
 
-void RiseDataEditor::CombinationSum(std::vector<std::vector<std::tuple<int, int>>>& res, std::map<int, int, std::greater<int>> candidates, std::stack<std::tuple<int, int>>& combination, int target)
+void RiseDataEditor::CombinationSum(std::vector<std::unordered_map<int, int>>& res, std::map<int, int, std::greater<int>> candidates, std::stack<int>& combination, int startLevel, int target)
 {
-    if (target == 0)
+    if (target <= 0)
     {
-        std::vector<std::tuple<int, int>> temp{};
-        std::stack<std::tuple<int, int>> copy(combination);
+        std::unordered_map<int, int> temp{};
+        std::stack<int> copy(combination);
         while (!copy.empty())
         {
-            auto p = copy.top();
-            temp.push_back(p);
+            auto key = copy.top();
+            if (!temp.contains(key))
+            {
+                temp[key] = 0;
+            }
+            temp[key] += 1;
             copy.pop();
         }
         res.push_back(temp);
         return;
     }
 
-    for (auto level = target; level > 0; --level)
+    for (auto level = startLevel; level > 0; --level)
     {
         if (!candidates.contains(level))
         {
             continue;
         }
         auto size = candidates.at(level);
-        std::tuple<int, int> temp(size, target / level);
-        combination.push(temp);
-        CombinationSum(res, candidates, combination, target % level);
+
+        combination.push(size);
+        auto nextStartLevel = (level > target - level) ? target - level : level;
+        CombinationSum(res, candidates, combination, nextStartLevel, target - level);
         combination.pop();
     }
 }
 
-void RiseDataEditor::GenAll(std::vector<std::vector<std::vector<std::tuple<int, int>>>>& output, std::vector<std::vector<std::vector<std::tuple<int, int>>>> const& input, std::vector<std::vector<std::tuple<int, int>>>& cur, unsigned cur_row)
+void RiseDataEditor::GenAll(std::vector<std::vector<std::unordered_map<int, int>>>& output, std::vector<std::vector<std::unordered_map<int, int>>> const& input, std::vector<std::unordered_map<int, int>>& cur, unsigned cur_row)
 {
     if (cur_row >= input.size())
     {

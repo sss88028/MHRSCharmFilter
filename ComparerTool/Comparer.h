@@ -29,9 +29,9 @@ namespace Comparer
 		int Compare(const Charm& c1, const Charm& c2);
 	private:
 		bool MatchSkill(std::unordered_map<int, int> slots, std::unordered_map<int, int> skillPair, int skillCountHelper);
-		std::vector<std::vector<std::tuple<int, int>>> Build(std::map<int, int, std::greater<int>> candidates, int target);
-		void CombinationSum(std::vector<std::vector<std::tuple<int, int>>>& res, std::map<int, int, std::greater<int>> candidates, std::stack<std::tuple<int, int>>& combination, int target);
+		std::vector<std::unordered_map<int, int>> Build(std::map<int, int, std::greater<int>> candidates, int target);
+		void CombinationSum(std::vector<std::unordered_map<int, int>>& res, std::map<int, int, std::greater<int>> candidates, std::stack<int>& combination, int startSize, int target);
 
-		void GenAll(std::vector<std::vector<std::vector<std::tuple<int, int>>>> & output, std::vector<std::vector<std::vector<std::tuple<int, int>>>> const & input, std::vector<std::vector<std::tuple<int, int>>>& cur_perm, unsigned cur_row = 0);
+		void GenAll(std::vector<std::vector<std::unordered_map<int, int>>>& output, std::vector<std::vector<std::unordered_map<int, int>>> const & input, std::vector<std::unordered_map<int, int>>& cur, unsigned cur_row = 0);
 	};
 }
