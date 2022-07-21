@@ -77,7 +77,7 @@ int main()
         {
             .Slots = {4, 1},
             .Skills = {0, 0},
-            .SkillLevels = {1, 0},
+            .SkillLevels = {0, 0},
         };
         Comparer::Charm c2
         {
@@ -127,7 +127,7 @@ int main()
         Comparer::Charm c2
         {
             .Slots = {0, 0, 0},
-            .Skills = {5, 0},
+            .Skills = {10, 0},
             .SkillLevels = {1, 0},
         };
         std::cout << "Expect 0 ," << c.Compare(c1, c2) << "\n";;
@@ -175,6 +175,22 @@ int main()
             .Slots = {1, 1, 0},
             .Skills = {5, 1},
             .SkillLevels = {1, 1},
+        };
+        std::cout << "Expect -1 ," << c.Compare(c1, c2) << "\n";;
+    }
+
+    {
+        Comparer::Charm c1
+        {
+            .Slots = {3, 1, 1},
+            .Skills = {1, 2},
+            .SkillLevels = {2, 2},
+        };
+        Comparer::Charm c2
+        {
+            .Slots = {2, 1, 1},
+            .Skills = {1, 0},
+            .SkillLevels = {2, 0},
         };
         std::cout << "Expect -1 ," << c.Compare(c1, c2) << "\n";;
     }

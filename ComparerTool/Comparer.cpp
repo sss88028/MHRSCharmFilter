@@ -41,8 +41,8 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
     for (auto p : skillPair)
     {
         isSkillEqual &= (p.second == 0);
-        isAllSkillBigger &= (p.second > 0);
-        isAllSkillSmaller &= (p.second < 0);
+        isAllSkillBigger &= (p.second >= 0);
+        isAllSkillSmaller &= (p.second <= 0);
 
         skillBiggerCount += (p.second > 0 ? p.second : 0);
         skillSmallerCount -= (p.second < 0 ? p.second : 0);
@@ -82,6 +82,11 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
                     c1SoltPair[i] = 0;
                 }
                 c1SoltPair[i] += pair.second;
+                if (!c2SoltPair.contains(i))
+                {
+                    c2SoltPair[i] = 0;
+                }
+                c2SoltPair[i] -= pair.second;
             }
         }
         if (pair.second < 0)
@@ -93,6 +98,12 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
                     c2SoltPair[i] = 0;
                 }
                 c2SoltPair[i] -= pair.second;
+
+                if (!c1SoltPair.contains(i))
+                {
+                    c1SoltPair[i] = 0;
+                }
+                c1SoltPair[i] += pair.second;
             }
         }
     }
@@ -107,6 +118,17 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
         isSoltEqual &= (p.second == 0);
         soltBiggerCount += (p.second > 0 ? count : 0);
         soltSmallerCount += (p.second < 0 ? count : 0);
+    }
+    if (isSoltEqual)
+    {
+        if (isAllSkillBigger)
+        {
+            return -1;
+        }
+        if (isAllSkillSmaller)
+        {
+            return 1;
+        }
     }
     if (isSkillEqual && isSoltEqual)
     {
@@ -125,26 +147,22 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
     if (isSkillEqual && soltSmallerCount == soltBiggerCount)
     {
         auto isC1Bigger = true;
-        auto tempC1Slot = c1SoltPair;
         for (auto c2Slot : c2SoltPair)
         {
-            if (!tempC1Slot.contains(c2Slot.first) || tempC1Slot[c2Slot.first] < c2Slot.second)
+            if (!c1SoltPair.contains(c2Slot.first) || c1SoltPair[c2Slot.first] < 0)
             {
                 isC1Bigger = false;
                 break;
             }
-            tempC1Slot[c2Slot.first] -= c2Slot.second;
         }
         auto isC2Bigger = true;
-        auto tempC2Slot = c2SoltPair;
         for (auto c1Slot : c1SoltPair)
         {
-            if (!tempC2Slot.contains(c1Slot.first) || tempC2Slot[c1Slot.first] < c1Slot.second)
+            if (!c2SoltPair.contains(c1Slot.first) || c2SoltPair[c1Slot.first] < 0)
             {
                 isC2Bigger = false;
                 break;
             }
-            tempC2Slot[c1Slot.first] -= c1Slot.second;
         }
 
         if (isC2Bigger && isC1Bigger)
@@ -166,24 +184,21 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
         return 0;
     }
 
+    //auto checkStr = fmt::format("[RiseDataEditor.CompareCharm] check {} > {}", c1.get_name(get_skillname), c2.get_name(get_skillname));
+    //API::get()->log_info(checkStr.c_str());
     auto isC1Bigger = MatchSkill(c1SoltPair, skillPair, -1);
+    //checkStr = fmt::format("[RiseDataEditor.CompareCharm] check {} < {}", c1.get_name(get_skillname), c2.get_name(get_skillname));
+    //API::get()->log_info(checkStr.c_str());
     auto isC2Bigger = MatchSkill(c2SoltPair, skillPair, 1);
 
-    //std::cout << "isC1Bigger : " << (isC1Bigger ? "true" : "false") << ", " << "isC2Bigger : " << (isC2Bigger ? "true" : "false") << "\n";
+    //auto str = fmt::format("[RiseDataEditor.CompareCharm] {} {}, {} {}, {} {}", isC1Bigger, isC2Bigger, skillSmallerCount, skillBiggerCount, isAllSkillBigger, isAllSkillSmaller);
+    //API::get()->log_info(str.c_str());
     if (isC1Bigger && !isC2Bigger)
     {
-        if (skillSmallerCount == 0)
-        {
-            return 0;
-        }
         return -1;
     }
     else if (!isC1Bigger && isC2Bigger)
     {
-        if (skillBiggerCount == 0)
-        {
-            return 0;
-        }
         return 1;
     }
     if (!isC1Bigger && !isC2Bigger)
@@ -192,11 +207,11 @@ int Comparer::Comparer::Compare(const Charm& c1, const Charm& c2)
     }
     if (isAllSkillBigger)
     {
-        return 1;
+        return -1;
     }
     else if (isAllSkillSmaller)
     {
-        return -1;
+        return 1;
     }
 
     return 0;
@@ -235,6 +250,13 @@ bool Comparer::Comparer::MatchSkill(std::unordered_map<int, int> slots, std::uno
         return false;
     }
 
+    for (auto slotPair : slots)
+    {
+        if (slotPair.second < 0)
+        {
+            return false;
+        }
+    }
     std::vector<std::vector<std::unordered_map<int, int>>> output;
     std::vector<std::unordered_map<int, int>> temp;
     std::vector<std::vector<int>> v;
@@ -262,6 +284,13 @@ bool Comparer::Comparer::MatchSkill(std::unordered_map<int, int> slots, std::uno
                 if (!canSolve)
                 {
                     break;
+                }
+            }
+            for (auto slotPair : tempSoltPair)
+            {
+                if (slotPair.second < 0)
+                {
+                    canSolve = false;
                 }
             }
             if (!canSolve)

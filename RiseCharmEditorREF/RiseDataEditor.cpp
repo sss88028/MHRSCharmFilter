@@ -915,6 +915,7 @@ void RiseDataEditor::RenderUICharmFilter()
         ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.3f, 0.3f, 1.0f));
         ImGui::TextWrapped("Filting");
         ImGui::PopStyleColor();
+        return;
     }
 
     std::vector<Charm> charms = GetCharms();
@@ -929,7 +930,7 @@ void RiseDataEditor::RenderUICharmFilter()
 
     ImGui::Checkbox(_labelRemainLock.c_str(), &_isKeepLock);
 
-    if (ImGui::Button("Filt"))
+    if (!_isFilting && ImGui::Button("Filt"))
     {
         BuildDecoMap();
         _isFilting = true;
@@ -1345,7 +1346,6 @@ void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock
     }
 
     delete []set;
-    _isFilting = false;
 
     API::get()->log_info("[RiseDataEditor.FiltCharm] start set");
     for (auto charm : charms) 
@@ -1357,10 +1357,18 @@ void RiseDataEditor::FiltCharm(std::vector<Charm>& charms, const bool isKeepLock
         *entry->get_field<bool>("_IsLock") = charm.IsLocked;
     }
     API::get()->log_info("[RiseDataEditor.FiltCharm] end");
+    _isFilting = false;
 }
 
 bool RiseDataEditor::MatchSkill(std::unordered_map<int, int> slots, std::unordered_map<int, int> skillPair, int skillCountHelper)
 {
+    for (auto slotPair : slots)
+    {
+        if (slotPair.second < 0)
+        {
+            return false;
+        }
+    }
     auto isCanSolve = true;
     std::vector<std::vector<std::unordered_map<int, int>>> tempDecoSet{};
 
@@ -1693,8 +1701,8 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
     for (auto p : skillPair)
     {
         isSkillEqual &= (p.second == 0);
-        isAllSkillBigger &= (p.second > 0);
-        isAllSkillSmaller &= (p.second < 0);
+        isAllSkillBigger &= (p.second >= 0);
+        isAllSkillSmaller &= (p.second <= 0);
 
         skillBiggerCount += (p.second > 0 ? p.second : 0);
         skillSmallerCount -= (p.second < 0 ? p.second : 0);
@@ -1771,6 +1779,17 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
         soltBiggerCount += (p.second > 0 ? count : 0);
         soltSmallerCount += (p.second < 0 ? count : 0);
     }
+    if (isSoltEqual)
+    {
+        if (isAllSkillBigger)
+        {
+            return -1;
+        }
+        if (isAllSkillSmaller)
+        {
+            return 1;
+        }
+    }
     if (isSkillEqual && isSoltEqual)
     {
         return -1;
@@ -1836,18 +1855,10 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
     //API::get()->log_info(str.c_str());
     if (isC1Bigger && !isC2Bigger)
     {
-        if (skillSmallerCount == 0)
-        {
-            return 0;
-        }
         return -1;
     }
     else if (!isC1Bigger && isC2Bigger)
     {
-        if (skillBiggerCount == 0)
-        {
-            return 0;
-        }
         return 1;
     }
     if (!isC1Bigger && !isC2Bigger)
@@ -1856,11 +1867,11 @@ int RiseDataEditor::CompareCharm(const Charm& c1, const Charm& c2)
     }
     if (isAllSkillBigger)
     {
-        return 1;
+        return -1;
     }
     else if (isAllSkillSmaller)
     {
-        return -1;
+        return 1;
     }
 
     return 0;
